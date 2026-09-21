@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -133,11 +134,12 @@ fun ExpressiveButton(
     val pressed by interaction.collectIsPressedAsState()
     val reduceMotion = LocalReduceMotion.current
 
-    val shape = rememberMorphShape(
-        target = if (pressed) ExpressiveShapeKind.SQUIRCLE else ExpressiveShapeKind.PILL,
-        initial = ExpressiveShapeKind.PILL,
-        reduceMotion = reduceMotion
+    val cornerPercent by animateFloatAsState(
+        targetValue = if (pressed) 28f else 50f,
+        animationSpec = if (reduceMotion) snap() else ExpressiveMotion.springBouncy(),
+        label = "buttonCornerShape"
     )
+    val shape = RoundedCornerShape(percent = cornerPercent.toInt())
 
     val pressScale by animateFloatAsState(
         targetValue = if (pressed) 0.96f else 1f,
@@ -158,15 +160,27 @@ fun ExpressiveButton(
                 containerColor = containerColor,
                 contentColor = contentColor ?: androidx.compose.ui.graphics.Color.Unspecified,
             )
-            else -> baseColors
+            ExpressiveButtonVariant.TONAL -> ButtonDefaults.filledTonalButtonColors(
+                containerColor = containerColor,
+                contentColor = contentColor ?: androidx.compose.ui.graphics.Color.Unspecified,
+            )
+            ExpressiveButtonVariant.OUTLINED -> ButtonDefaults.outlinedButtonColors(
+                contentColor = contentColor ?: containerColor,
+            )
+            ExpressiveButtonVariant.ELEVATED -> ButtonDefaults.elevatedButtonColors(
+                containerColor = containerColor,
+                contentColor = contentColor ?: androidx.compose.ui.graphics.Color.Unspecified,
+            )
+            ExpressiveButtonVariant.TEXT -> ButtonDefaults.textButtonColors(
+                contentColor = contentColor ?: containerColor,
+            )
         }
     } else baseColors
     val border = if (variant == ExpressiveButtonVariant.OUTLINED)
-        androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null
+        androidx.compose.foundation.BorderStroke(1.dp, contentColor ?: containerColor ?: MaterialTheme.colorScheme.outline) else null
     val contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = size.hPadding)
     val mods = modifier
         .height(size.height)
-        .heightIn(min = 48.dp)
         .scale(pressScale)
         .let { if (testTag != null) it.testTag(testTag) else it }
 
@@ -201,12 +215,23 @@ fun ExpressiveButton(
 
 @Composable
 private fun ExpressiveButtonContent(icon: ImageVector?, label: String?, size: ExpressiveButtonSize) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
         if (icon != null) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(size.iconSize))
             if (label != null) androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
         }
-        if (label != null) Text(label, style = expressiveButtonTextStyle(size), fontWeight = FontWeight.Bold)
+        if (label != null) {
+            Text(
+                text = label,
+                style = expressiveButtonTextStyle(size),
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -529,11 +554,12 @@ fun ExpressiveChip(
     val reduceMotion = LocalReduceMotion.current
     val pressed = androidx.compose.runtime.remember { MutableInteractionSource() }
     val isPressed by pressed.collectIsPressedAsState()
-    val shape = rememberMorphShape(
-        target = if (selected || isPressed) ExpressiveShapeKind.PILL else ExpressiveShapeKind.SQUIRCLE,
-        initial = ExpressiveShapeKind.SQUIRCLE,
-        reduceMotion = reduceMotion
+    val cornerPercent by animateFloatAsState(
+        targetValue = if (selected || isPressed) 50f else 28f,
+        animationSpec = if (reduceMotion) snap() else ExpressiveMotion.springBouncy(),
+        label = "chipCornerShape"
     )
+    val shape = RoundedCornerShape(percent = cornerPercent.toInt())
     val scale by animateFloatAsState(
         targetValue = if (selected) 1.04f else 1f,
         animationSpec = if (reduceMotion) snap() else ExpressiveMotion.springBouncy(),
@@ -726,12 +752,8 @@ fun ExpressiveDialog(
         androidx.compose.material3.Card(
             modifier = modifier
                 .fillMaxWidth()
-                .scale(dialogScale)
-                .clip(rememberMorphShape(
-                    target = ExpressiveShapeKind.SQUIRCLE,
-                    initial = ExpressiveShapeKind.SQUIRCLE,
-                    reduceMotion = reduceMotion
-                )),
+                .scale(dialogScale),
+            shape = RoundedCornerShape(28.dp),
             colors = androidx.compose.material3.CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             ),
@@ -819,11 +841,7 @@ fun ExpressiveModalBottomSheet(
  * pill shape, tonal inverse surface, springy slide-up.
  */
 @Composable
-fun ExpressiveSnackbarShape(): Shape = rememberMorphShape(
-    target = ExpressiveShapeKind.PILL,
-    initial = ExpressiveShapeKind.SQUIRCLE,
-    reduceMotion = LocalReduceMotion.current,
-)
+fun ExpressiveSnackbarShape(): Shape = RoundedCornerShape(16.dp)
 
 /** Large flexible top app bar title with expressive typography. */
 @Composable

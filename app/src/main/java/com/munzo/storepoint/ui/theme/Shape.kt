@@ -120,19 +120,16 @@ class MorphShape(
         val maxX = bounds[2]; val maxY = bounds[3]
         val srcW = (maxX - minX).coerceAtLeast(1e-4f)
         val srcH = (maxY - minY).coerceAtLeast(1e-4f)
-        val scale = minOf(size.width / srcW, size.height / srcH)
-        val offset = Offset(
-            (size.width - srcW * scale) / 2f - minX * scale,
-            (size.height - srcH * scale) / 2f - minY * scale
-        )
+        val scaleX = size.width / srcW
+        val scaleY = size.height / srcH
 
         val path = Path()
         var started = false
         morph.forEachCubic(progress) { cubic ->
-            val p0 = Offset(cubic.anchor0X * scale + offset.x, cubic.anchor0Y * scale + offset.y)
-            val p1 = Offset(cubic.control0X * scale + offset.x, cubic.control0Y * scale + offset.y)
-            val p2 = Offset(cubic.control1X * scale + offset.x, cubic.control1Y * scale + offset.y)
-            val p3 = Offset(cubic.anchor1X * scale + offset.x, cubic.anchor1Y * scale + offset.y)
+            val p0 = Offset((cubic.anchor0X - minX) * scaleX, (cubic.anchor0Y - minY) * scaleY)
+            val p1 = Offset((cubic.control0X - minX) * scaleX, (cubic.control0Y - minY) * scaleY)
+            val p2 = Offset((cubic.control1X - minX) * scaleX, (cubic.control1Y - minY) * scaleY)
+            val p3 = Offset((cubic.anchor1X - minX) * scaleX, (cubic.anchor1Y - minY) * scaleY)
             if (!started) {
                 path.moveTo(p0.x, p0.y); started = true
             }
@@ -175,4 +172,3 @@ fun rememberMorphShape(
     )
     return remember(morph, progress) { MorphShape(morph, progress) }
 }
-
