@@ -1,4 +1,4 @@
-﻿package com.munzo.storepoint
+package com.munzo.storepoint
 
 import com.munzo.storepoint.util.AppUpdateManager
 import org.junit.Assert.assertFalse
@@ -49,5 +49,10 @@ class AppUpdateManagerTest {
         assertFalse(AppUpdateManager.isVersionNewer("", "2.4.0"))
         assertFalse(AppUpdateManager.isVersionNewer("invalid", "2.4.0"))
         assertFalse(AppUpdateManager.isVersionNewer("   ", "2.4.0"))
+    }
+
+    @Test
+    fun appVersion_isOnePointZeroPointOne() {
+        org.junit.Assert.assertEquals("1.0.1", com.munzo.storepoint.util.APP_VERSION)
     }
 }

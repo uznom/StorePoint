@@ -1223,7 +1223,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = "Automated GitHub Releases distribution & OTA updates.",
+                            text = "Automated GitHub Releases distribution & OTA updates. (Installed: v$APP_VERSION)",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }

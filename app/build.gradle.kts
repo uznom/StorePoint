@@ -13,8 +13,8 @@ android {
     applicationId = "com.munzo.storepoint"
     minSdk = 34
     targetSdk = 36
-    versionCode = 250
-    versionName = "2.4.10"
+    versionCode = 101
+    versionName = "1.0.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

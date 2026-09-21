@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.munzo.storepoint.ui.StorePointViewModel
+import com.munzo.storepoint.util.APP_VERSION
 import com.munzo.storepoint.ui.layout.WindowLayout
 import com.munzo.storepoint.ui.layout.rememberWindowLayout
 import com.munzo.storepoint.ui.theme.ExpressiveButtonShape
@@ -424,7 +425,7 @@ fun TermsAndConditionsSlide(
             )
 
             Text(
-                text = "Version 2.4.0 · Effective September 2026",
+                text = "Version $APP_VERSION · Effective September 2026",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

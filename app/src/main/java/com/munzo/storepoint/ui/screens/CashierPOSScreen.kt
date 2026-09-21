@@ -67,6 +67,7 @@ import com.munzo.storepoint.ui.StorePointViewModel
 import com.munzo.storepoint.util.PdfExportUtil
 import com.munzo.storepoint.util.DigitalServicesHelper
 import com.munzo.storepoint.util.PendingDigitalService
+import com.munzo.storepoint.util.APP_VERSION
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -691,7 +692,7 @@ fun CashierPOSScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "StorePoint POS Terminal v2.1.0",
+                        text = "StorePoint POS Terminal v$APP_VERSION",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -3604,7 +3605,7 @@ fun CashierPOSScreen(
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text(
-                                        text = "• StorePoint POS Terminal v2.1.0",
+                                        text = "• StorePoint POS Terminal v$APP_VERSION",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold
                                     )
