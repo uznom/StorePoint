@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">StorePoint</string>
+    <string name="device_admin_description">Secures the StorePoint checkout register terminal from unauthorized uninstallation or clearing of transaction systems data by staff members.</string>
+</resources>

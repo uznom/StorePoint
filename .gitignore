@@ -1,0 +1,54 @@
+# Built application files & caches
+*.iml
+.gradle
+.kotlin
+/build
+*/build
+/captures
+.externalNativeBuild
+.cxx
+.build-outputs/
+.aistudio/
+*.apk
+*.aab
+
+# IDE & OS specific files
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+_lint_verify.log
+dep_probe.log
+metadata.json
+
+# Sensitive environment variables & secrets
+.env
+.env.*
+!.env.example
+*.env
+local.properties
+/local.properties
+secrets.properties
+*.properties_backup
+
+# Keystores, signing keys, and certificates
+*.keystore
+*.keystore.base64
+debug.keystore
+debug.keystore.base64
+*.jks
+*.key
+*.pk8
+*.p12
+*.pem
+*.der
+my-upload-key.jks
+
+# Cloud, API credentials, and service accounts
+google-services.json
+GoogleService-Info.plist
+credentials.json
+client_secret*.json
+service-account*.json
+*firebase*.json
+

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- White brand card base, matching the squircle in the app UI logo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 41,28 h 26 a 13,13 0 0 1 13,13 v 26 a 13,13 0 0 1 -13,13 h -26 a 13,13 0 0 1 -13,-13 v -26 a 13,13 0 0 1 13,-13 z" />
+
+    <!-- "S" Letter with round joins/caps -->
+    <path
+        android:strokeColor="#120A8F"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 51.5,42 H 39.5 V 54 H 51.5 V 66 H 39.5" />
+
+    <!-- "P" Letter with round joins/caps -->
+    <path
+        android:strokeColor="#120A8F"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 56.5,66 V 42 H 62.5 A 6,6 0 0 1 68.5,48 V 48 A 6,6 0 0 1 62.5,54 H 56.5" />
+
+</vector>
