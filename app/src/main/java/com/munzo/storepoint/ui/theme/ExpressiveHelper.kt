@@ -132,10 +132,11 @@ fun Modifier.glassPanel(
  */
 @Composable
 fun Modifier.tactileBounce(
-    onClick: (() -> Unit)? = null,
     // LAYA fast-response: press feedback defaults to cheap + static so catalog grids
     // scroll at 60fps. Opt specific hero surfaces into the spring with pressFeedback = true.
-    pressFeedback: Boolean = false
+    pressFeedback: Boolean = false,
+    // Keep onClick LAST so trailing-lambda call sites (`.tactileBounce { ... }`) keep working.
+    onClick: (() -> Unit)? = null
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -213,7 +214,9 @@ fun Modifier.expressiveGlassCard(
     elevation: Dp = 2.dp,
     blurRadius: Dp = 0.dp
 ): Modifier {
-    // LAYA fast-response: remember gradient/shadow inputs so scrolling lists do not`r`n    // reallocate Brush + shadow layers on every recomposition (major GPU win).`r`n    val glassBg = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.88f)
+    // LAYA fast-response: remember gradient/shadow inputs so scrolling lists do not
+    // reallocate Brush + shadow layers on every recomposition (major GPU win).
+    val glassBg = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.88f)
     val highlightColor = accentGlow ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
@@ -357,11 +360,9 @@ fun ExpressiveSplitButton(
             val isSecondaryPressed by secIntSource.collectIsPressedAsState()
             val arrowRotation by animateFloatAsState(
                 targetValue = if (isSecondaryPressed) 180f else 0f,
-                animationSpec = AnimationSpec(
+                animationSpec = tween(
                     durationMillis = 220,
-                    delayMillis = 0,
-                    easing = FastOutSlowInEasing,
-                    visibilityThreshold = 0.01f
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing
                 ),
                 label = "secArrowRotation"
             )

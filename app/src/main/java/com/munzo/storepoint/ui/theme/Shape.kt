@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.CornerRounding
@@ -45,20 +46,20 @@ data class AsymmetricCardShape(
 ) : androidx.compose.ui.graphics.Shape {
     override fun createOutline(
         size: androidx.compose.ui.geometry.Size,
-        layoutDirection: androidx.compose.ui.layout.LayoutDirection,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
         density: androidx.compose.ui.unit.Density,
     ): androidx.compose.ui.graphics.Outline {
         val path = androidx.compose.ui.graphics.Path().apply {
             val w = size.width
             val h = size.height
-            val tl = topLeft.toPx()
-            val br = bottomRight.toPx()
+            val tl = with(density) { topLeft.toPx() }
+            val br = with(density) { bottomRight.toPx() }
             moveTo(tl, 0f)
             lineTo(w, 0f)
             lineTo(w, h - br)
-            androidx.compose.ui.graphics.quadraticBezierTo(w, h, w - br, h)
+            quadraticBezierTo(w, h, w - br, h)
             lineTo(tl, h)
-            androidx.compose.ui.graphics.quadraticBezierTo(0f, h, 0f, h - tl)
+            quadraticBezierTo(0f, h, 0f, h - tl)
             close()
         }
         return androidx.compose.ui.graphics.Outline.Generic(path)
@@ -111,32 +112,35 @@ fun expressivePolygon(kind: ExpressiveShapeKind): RoundedPolygon = when (kind) {
     ExpressiveShapeKind.CIRCLE -> RoundedPolygon.circle(numVertices = 12, radius = 1f)
     ExpressiveShapeKind.PILL -> RoundedPolygon.pill(width = 2f, height = 1f, smoothing = 0.85f)
     ExpressiveShapeKind.CutCornerPill -> {
-        // Cut-corner pill: top-left & bottom-right rounded 0.5, top-right & bottom-left sharp.
-        // Approximated as a path-derived RoundedPolygon for morphing with rememberMorphShape.
-        val path = androidx.compose.ui.graphics.Path().apply {
-            val r = 0.5f // corner radius for the rounded corners
-            // Start top-left, after rounded corner
-            moveTo(r, 0f)
-            // Top edge to top-right (sharp)
-            lineTo(2f - r, 0f)
-            // Top-right corner (sharp)
-            lineTo(2f, r)
-            // Right edge down to bottom-right area
-            lineTo(2f, 2f - r)
-            // Bottom-right rounded corner: arc back toward bottom-left
-            arcTo(androidx.compose.ui.geometry.Rect(2f - 2f * r, 2f - 2f * r, 2f * r, 2f * r), -90f, 90f, false)
-            // Bottom edge to bottom-left (sharp)
-            lineTo(r, 2f)
-            // Bottom-left corner (sharp)
-            lineTo(0f, 2f - r)
-            // Left edge up to top-left area
-            lineTo(0f, r)
-            // Top-left rounded corner: arc back to start
-            arcTo(androidx.compose.ui.geometry.Rect(0f, 0f, 2f * r, 2f * r), 90f, 90f, false)
-            close()
-        }
-        // Convert path to RoundedPolygon for morphing.
-        androidx.graphics.shapes.RoundedPolygon(path)
+        // Cut-corner pill: rounded top-left & bottom-right, chamfered ("cut") top-right &
+        // bottom-left — same signature as CutCornerShape(topStart, bottomEnd) in the catalog.
+        // graphics-shapes 1.0.1 has no Path-based constructor, so express it as an explicit
+        // vertex loop in the shared centered 2x2 box (coords -1..1), 2 vertices per cut corner.
+        RoundedPolygon(
+            vertices = floatArrayOf(
+                -1f, -0.45f,  // left edge → top-left rounded corner
+                -0.45f, -1f,  // top-left rounded corner → top edge
+                 0.45f, -1f,  // top edge → top-right cut
+                 1f, -0.45f,  // top-right cut (sharp diagonal)
+                 1f,  0.45f,  // right edge → bottom-right rounded corner
+                 0.45f,  1f,  // bottom-right rounded corner → bottom edge
+                -0.45f,  1f,  // bottom edge → bottom-left cut
+                -1f,  0.45f   // bottom-left cut (sharp diagonal)
+            ),
+            rounding = CornerRounding(0.35f, 0.6f),
+            perVertexRounding = listOf(
+                CornerRounding(0.42f, 0.75f), // TL rounded
+                CornerRounding(0.42f, 0.75f),
+                CornerRounding(0f),           // TR cut — sharp
+                CornerRounding(0f),
+                CornerRounding(0.42f, 0.75f), // BR rounded
+                CornerRounding(0.42f, 0.75f),
+                CornerRounding(0f),           // BL cut — sharp
+                CornerRounding(0f)
+            ),
+            centerX = 0f,
+            centerY = 0f
+        )
     }
     ExpressiveShapeKind.COOKIE -> RoundedPolygon(
         numVertices = 9,

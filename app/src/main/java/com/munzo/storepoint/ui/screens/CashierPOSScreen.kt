@@ -44,7 +44,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import com.munzo.storepoint.ui.theme.ExpressiveButtonShape
 import com.munzo.storepoint.ui.theme.ExpressiveSectionHeader
-import com.munzo.storepoint.ui.components.stagger
+import com.munzo.storepoint.ui.components.staggeredEnter
 import com.munzo.storepoint.ui.theme.AsymmetricCardShape
 import com.munzo.storepoint.ui.theme.ExpressiveChipShape
 import com.munzo.storepoint.ui.theme.expressiveGlassCard
@@ -1040,6 +1040,7 @@ fun CashierPOSScreen(
                                 !isOldDigital && (selectedCategory == null || p.categoryId == selectedCategory?.id) &&
                                         (effectiveQuery.isBlank() || p.name.contains(effectiveQuery, ignoreCase = true) || p.barcode.contains(effectiveQuery))
                             }
+                        }
 
                             val searchQueryMatchedDigital = effectiveQuery.isNotEmpty() && (
                                 effectiveQuery.contains("gcash", ignoreCase = true) || 
@@ -1103,10 +1104,8 @@ fun CashierPOSScreen(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     items(8) { index ->
-                                        ShimmerProductCard().let { composable ->
-                                            composable.modifier = composable.modifier
-                                                .clip(AsymmetricCardShape(14.dp, 14.dp))
-                                        composable
+                                        Box(modifier = Modifier.clip(AsymmetricCardShape(14.dp, 14.dp))) {
+                                            ShimmerProductCard()
                                         }
                                     }
                                 }
@@ -1166,7 +1165,7 @@ fun CashierPOSScreen(
                                                         }
                                                     }
                                                 }
-                                                .stagger((item.id and 0x3F) % 8, 40L)
+                                                .staggeredEnter((item.id and 0x3F) % 8)
                                                 .testTag("product_card_${item.id}"),
                                             shape = AsymmetricCardShape(16.dp, 16.dp),
                                             colors = CardDefaults.cardColors(

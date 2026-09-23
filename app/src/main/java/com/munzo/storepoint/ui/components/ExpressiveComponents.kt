@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -33,6 +35,8 @@ import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ElevatedButton
@@ -940,12 +944,13 @@ private data class AsymmetricCornerShape(
 ) : androidx.compose.ui.graphics.Shape {
     override fun createOutline(
         size: androidx.compose.ui.geometry.Size,
-        layoutDirection: androidx.compose.ui.layout.LayoutDirection,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
         density: androidx.compose.ui.unit.Density,
     ): androidx.compose.ui.graphics.Outline {
         val path = androidx.compose.ui.graphics.Path().apply {
             val w = size.width; val h = size.height
-            val ts = topStart.toPx(); val be = bottomEnd.toPx()
+            val ts = with(density) { topStart.toPx() }
+            val be = with(density) { bottomEnd.toPx() }
             moveTo(ts, 0f)
             lineTo(w, 0f)
             lineTo(w, h - be)
