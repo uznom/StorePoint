@@ -2469,7 +2469,7 @@ fun CashierPOSScreen(
                                         }
 
                                         IconButton(onClick = { viewModel.deleteParkedTransaction(item.id) }) {
-                                            Icon(Icons.Default.Delete, null, tint = Color.Red.copy(alpha = 0.6f))
+                                            Icon(Icons.Default.Delete, "Delete parked transaction", tint = Color.Red.copy(alpha = 0.6f))
                                         }
                                     }
                                 }

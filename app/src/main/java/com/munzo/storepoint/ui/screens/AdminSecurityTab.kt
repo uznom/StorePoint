@@ -31,8 +31,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.lifecycle.viewModelScope
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.munzo.storepoint.StorePointDeviceAdminReceiver
@@ -141,8 +144,12 @@ fun SecurityTab(viewModel: StorePointViewModel) {
 
     // Backup & Restore states
     val backupSnapshots by viewModel.backupSnapshots.collectAsState()
-    var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+            var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var pendingRestoreJson by remember { mutableStateOf("") }
+    // Admin PIN gate for destructive file-import restore (audit #4: every file-import entry
+    // point must re-authorize an admin before overwriting local data).
+    var restoreAdminPinInput by remember { mutableStateOf("") }
+    var restoreAdminPinError by remember { mutableStateOf("") }
     var restoreSummaryResult by remember { mutableStateOf<DatabaseBackupManager.RestoreSummary?>(null) }
     var showRestoreSummaryDialog by remember { mutableStateOf(false) }
 
@@ -531,8 +538,8 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                     leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) },
                     trailingIcon = {
                         if (appSearchQuery.isNotEmpty()) {
-                            IconButton(onClick = { appSearchQuery = "" }) {
-                                Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
+                                                        IconButton(onClick = { appSearchQuery = "" }) {
+                                Icon(Icons.Default.Close, "Clear search", modifier = Modifier.size(16.dp))
                             }
                         }
                     },
@@ -1935,7 +1942,11 @@ fun SecurityTab(viewModel: StorePointViewModel) {
     // --- FULL DATABASE RESTORE CONFIRMATION DIALOG ---
     if (showRestoreConfirmDialog) {
         AlertDialog(
-            onDismissRequest = { showRestoreConfirmDialog = false },
+                                                onDismissRequest = {
+                showRestoreConfirmDialog = false
+                restoreAdminPinInput = ""
+                restoreAdminPinError = ""
+            },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error)
@@ -1955,22 +1966,51 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
                     )
-                    OutlinedTextField(
+                                        OutlinedTextField(
                         value = restorePassphrase,
                         onValueChange = { restorePassphrase = it },
                         label = { Text("Backup password (required only for password-protected backups)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                    Text(
+                        "Full restore overwrites store data. Enter your Admin 6-Digit PIN to authorize:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    OutlinedTextField(
+                        value = restoreAdminPinInput,
+                        onValueChange = {
+                            if (it.length <= 6 && it.all { c -> c.isDigit() }) {
+                                restoreAdminPinInput = it
+                                restoreAdminPinError = ""
+                            }
+                        },
+                        label = { Text("Admin 6-Digit PIN") },
+                        isError = restoreAdminPinError.isNotEmpty(),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
                 }
             },
-            confirmButton = {
+                        confirmButton = {
                 Button(
+                    enabled = restoreAdminPinInput.length == 6,
                     onClick = {
-                        showRestoreConfirmDialog = false
-                        viewModel.restoreDatabaseBackup(pendingRestoreJson, restorePassphrase) { summary ->
-                            restoreSummaryResult = summary
-                            showRestoreSummaryDialog = true
+                        viewModel.viewModelScope.launch {
+                            if (viewModel.verifyAdminPin(restoreAdminPinInput)) {
+                                showRestoreConfirmDialog = false
+                                restoreAdminPinInput = ""
+                                restoreAdminPinError = ""
+                                viewModel.restoreDatabaseBackup(pendingRestoreJson, restorePassphrase) { summary ->
+                                    restoreSummaryResult = summary
+                                    showRestoreSummaryDialog = true
+                                }
+                            } else {
+                                restoreAdminPinError = "Incorrect Admin PIN. Restore not authorized."
+                            }
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -1979,7 +2019,11 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showRestoreConfirmDialog = false }) {
+                TextButton(onClick = {
+                    showRestoreConfirmDialog = false
+                    restoreAdminPinInput = ""
+                    restoreAdminPinError = ""
+                                }) {
                     Text("Cancel")
                 }
             }

@@ -158,20 +158,46 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         return SecurityHelper.hashPin(pin)
     }
 
+    /**
+     * Verifies a candidate admin PIN for privileged operations (inventory import certification).
+     *
+     * SECURITY (audit H1): fail-closed — a blank candidate never authenticates, a database with
+     * no admin accounts never auto-authorizes, and candidates are only checked through
+     * [SecurityHelper.verifyPin] (constant-time; legacy plaintext/SHA-256 hashes are still
+     * accepted there until they are upgraded on next login). The previous implementation's
+     * `pinHash == candidatePin` plaintext shortcut and blank/no-admin `return true` paths are
+     * removed. Repeated failures trigger a 60-second lockout to slow brute-force of the
+     * 6-digit PIN space.
+     */
     suspend fun verifyAdminPin(candidatePin: String): Boolean {
+        if (candidatePin.isBlank()) return false
+
+        val now = System.currentTimeMillis()
+        val lockedUntil = prefs.getLong("admin_pin_locked_until", 0L)
+        if (now < lockedUntil) return false
+
         val active = activeUser.value
-        if (active != null && active.role.equals("ADMIN", ignoreCase = true)) {
-            if (candidatePin.isBlank() || SecurityHelper.verifyPin(candidatePin, active.pinHash).isMatch || active.pinHash == candidatePin) {
-                return true
+        val verified = if (active != null && active.role.equals("ADMIN", ignoreCase = true) &&
+            SecurityHelper.verifyPin(candidatePin, active.pinHash).isMatch
+        ) {
+            true
+        } else {
+            val dbAdmins = repository.getAllUsersSync().filter { it.role.equals("ADMIN", ignoreCase = true) }
+            // Fail closed: with no admin accounts there is nothing valid to verify against.
+            dbAdmins.isNotEmpty() && dbAdmins.any { SecurityHelper.verifyPin(candidatePin, it.pinHash).isMatch }
+        }
+
+        if (verified) {
+            prefs.edit().putInt("admin_pin_fail_count", 0).putLong("admin_pin_locked_until", 0L).apply()
+        } else {
+            val fails = prefs.getInt("admin_pin_fail_count", 0) + 1
+            if (fails >= 5) {
+                prefs.edit().putInt("admin_pin_fail_count", 0).putLong("admin_pin_locked_until", now + 60_000L).apply()
+            } else {
+                prefs.edit().putInt("admin_pin_fail_count", fails).apply()
             }
         }
-        val dbAdmins = repository.getAllUsersSync().filter { it.role.equals("ADMIN", ignoreCase = true) }
-        if (dbAdmins.isEmpty()) {
-            return true
-        }
-        return dbAdmins.any { 
-            SecurityHelper.verifyPin(candidatePin, it.pinHash).isMatch || it.pinHash == candidatePin
-        }
+        return verified
     }
 
     // Active cart items (Product to count)
@@ -394,7 +420,22 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             val admins = repository.getAllUsersSync().filter { it.role.equals("ADMIN", ignoreCase = true) }
-            val isValid = admins.any { SecurityHelper.verifyPin(pin, it.passwordHash).isMatch || it.passwordHash == pin }
+            // SECURITY (audit H2): constant-time verification only — the previous
+            // `hash == pin` plaintext shortcut is removed. Legacy plaintext/SHA-256 hashes
+            // remain verifiable through SecurityHelper and are upgraded to PBKDF2 on success.
+            var isValid = false
+            if (pin.isNotBlank()) {
+                for (admin in admins) {
+                    val verification = SecurityHelper.verifyPin(pin, admin.passwordHash)
+                    if (verification.isMatch) {
+                        isValid = true
+                        if (verification.needsUpgrade) {
+                            repository.saveUser(admin.copy(pinHash = SecurityHelper.hashPin(pin)))
+                        }
+                        break
+                    }
+                }
+            }
 
             if (isValid) {
                 prefs.edit().putInt("kiosk_unlock_fail_count", 0).putLong("kiosk_unlock_locked_until", 0L).apply()

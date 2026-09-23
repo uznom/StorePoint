@@ -63,22 +63,11 @@
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-                <data android:mimeType="*/*" />
-                <data android:pathPattern=".*\\.spinventory" />
-                <data android:host="*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/vnd.storepoint.inventory" />
-            </intent-filter>
+            <!-- SECURITY (audit M1): External VIEW/SEND intent-filters were removed.
+                 MainActivity never parsed incoming intent data (no getIntent()/onNewIntent
+                 handling), so these filters only advertised dead file-import entry points
+                 that bypassed the admin-PIN gate. Imports go through the in-app SAF pickers
+                 in AdminSecurityTab, which are gated by verifyAdminPin(). -->
         </activity>
 
         <provider
@@ -97,8 +86,10 @@
             android:exported="true"
             android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
             <intent-filter>
+                <!-- Only the protected system broadcast is accepted. Legacy QUICKBOOT actions
+                     were removed: they are not protected broadcasts and could be spoofed by
+                     third-party apps to force-launch this activity (audit M2). -->
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>

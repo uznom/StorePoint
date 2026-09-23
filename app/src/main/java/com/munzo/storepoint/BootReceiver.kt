@@ -7,9 +7,11 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
-        if (action == Intent.ACTION_BOOT_COMPLETED ||
-            action == "android.intent.action.QUICKBOOT_POWERON" ||
-            action == "com.htc.intent.action.QUICKBOOT_POWERON") {
+        // Only the protected system broadcast BOOT_COMPLETED is honored. The legacy
+        // QUICKBOOT/HTC quick-boot actions were removed from both this check and the
+        // manifest: they are NOT protected broadcasts, so any third-party app could
+        // spoof them to force-launch the kiosk activity (audit M2).
+        if (action == Intent.ACTION_BOOT_COMPLETED) {
             
             val prefs = context.getSharedPreferences("storepoint_sys_prefs", Context.MODE_PRIVATE)
             val isKioskActive = prefs.getBoolean("is_kiosk_mode_active", false)

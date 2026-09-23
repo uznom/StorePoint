@@ -41,7 +41,16 @@ object AppUpdateManager {
     // Users or admins can override this in StorePoint Settings if they host on their own GitHub fork.
     var githubRepoOwner: String = "uznom"
     var githubRepoName: String = "StorePoint"
-    var githubToken: String = ""
+
+    // SECURITY (audit M3): kept private so the token can never be read back into logs,
+    // crash reports, or UI state. It lives only in memory (never persisted to prefs/disk)
+    // and is attached exclusively to HTTPS request headers inside this object.
+    private var githubToken: String = ""
+
+    /** Sets an optional GitHub token for private-repository update checks. Never logged or persisted. */
+    fun setGithubToken(token: String) {
+        githubToken = token.trim()
+    }
 
     private fun createConnection(urlStr: String, accept: String = "application/vnd.github.v3+json"): HttpURLConnection {
         return (URL(urlStr).openConnection() as HttpURLConnection).apply {

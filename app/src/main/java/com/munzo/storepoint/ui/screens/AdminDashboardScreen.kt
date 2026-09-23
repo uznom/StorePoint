@@ -1319,7 +1319,7 @@ fun ProductsTab(
                                             },
                                             modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp))
                                         ) {
-                                            Icon(Icons.Default.Remove, null, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.Remove, "Decrease audited quantity", modifier = Modifier.size(16.dp))
                                         }
 
                                         Text(
@@ -1336,7 +1336,7 @@ fun ProductsTab(
                                             },
                                             modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp))
                                         ) {
-                                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.Add, "Increase audited quantity", modifier = Modifier.size(16.dp))
                                         }
                                     }
 

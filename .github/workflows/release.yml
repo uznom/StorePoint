@@ -67,20 +67,25 @@ jobs:
       - name: Run Unit Tests (Pre-Release Validation)
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
-      - name: Build Android APK
+             - name: Build Signed Release APK (Primary Artifact)
         env:
           KEYSTORE_PATH: ${{ secrets.KEYSTORE_PATH }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          # Build debug APK (pre-signed and immediately installable on any Android device)
-          ./gradlew :app:assembleDebug --stacktrace
-
-          # If release signing credentials exist, also build signed release APK
+          # SECURITY / QA (audit #8): the release build (R8-minified + release signing
+          # config) is the ONLY APK published. A debug build must never be shipped as the
+          # primary release asset. When production signing secrets are absent the signing
+          # config falls back to the debug keystore (configured in build.gradle), but a
+          # warning is emitted and a real R8/signing error fails the workflow (no
+          # `|| echo skipped` masking).
           if [ -f "my-upload-key.jks" ] && [ -n "$STORE_PASSWORD" ]; then
-            echo "Building signed production release APK..."
-            ./gradlew :app:assembleRelease --stacktrace || echo "Release build skipped"
+            echo "Building production-signed release APK..."
+          else
+            echo "::warning::Release signing secrets not configured (KEYSTORE_BASE64 + STORE_PASSWORD). Falling back to debug keystore signing - set production secrets for Play/store distribution."
           fi
+          ./gradlew :app:assembleRelease --stacktrace
 
       - name: Prepare Release Assets
         id: prepare_assets
@@ -88,21 +93,16 @@ jobs:
           TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
           mkdir -p release-assets
 
-          # Copy installable APK with clean naming
-          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-            cp app/build/outputs/apk/debug/app-debug.apk release-assets/StorePoint-${TAG}.apk
-            echo "✓ Debug APK copied to release-assets/"
+                    # The signed release APK is the PRIMARY (and only) APK asset. A debug build is
+          # never published - audit finding #8: debug APKs must not ship as release assets.
+          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            cp app/build/outputs/apk/release/app-release.apk release-assets/StorePoint-${TAG}.apk
+            echo "✓ Release APK copied to release-assets/StorePoint-${TAG}.apk"
           else
-            echo "::error::Debug APK not found at app/build/outputs/apk/debug/app-debug.apk"
+            echo "::error::Release APK not found at app/build/outputs/apk/release/app-release.apk"
             echo "Build may have failed. Listing any APK outputs:"
             find app/build/outputs/apk/ -name "*.apk" 2>/dev/null || echo "(no APK files found)"
             exit 1
-          fi
-
-          # Copy production release APK if built
-          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            cp app/build/outputs/apk/release/app-release.apk release-assets/StorePoint-${TAG}-signed-release.apk
-            echo "✓ Signed release APK copied to release-assets/"
           fi
 
           # Verify at least one APK exists before generating checksums

@@ -409,65 +409,90 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Returns true when [table] already has a column named [column] (PRAGMA table_info).
+         * Used by migrations below so column additions are idempotent WITHOUT swallowing
+         * unrelated failures (audit M4: blanket try/catch previously committed partial schemas).
+         */
+        private fun SupportSQLiteDatabase.columnExists(table: String, column: String): Boolean {
+            query("PRAGMA table_info(`$table`)").use { cursor ->
+                val nameIndex = cursor.getColumnIndex("name")
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == column) return true
+                }
+            }
+            return false
+        }
+
+        /** Returns true when [table] exists in the database (sqlite_master lookup). */
+        private fun SupportSQLiteDatabase.tableExists(table: String): Boolean {
+            query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", arrayOf(table)).use { cursor ->
+                return cursor.moveToFirst()
+            }
+        }
+
         val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                try {
+                // Existence guards replace blanket try/catch so genuine SQL failures
+                // propagate and roll the migration transaction back (fail-closed).
+                if (!db.columnExists("store_config", "smartLoadBalance")) {
                     db.execSQL("ALTER TABLE store_config ADD COLUMN smartLoadBalance REAL NOT NULL DEFAULT 0.0")
-                } catch (e: Exception) {
-                    android.util.Log.w("AppDatabase", "smartLoadBalance column might already exist: ${e.message}")
                 }
-                try {
+                if (!db.columnExists("store_config", "globeLoadBalance")) {
                     db.execSQL("ALTER TABLE store_config ADD COLUMN globeLoadBalance REAL NOT NULL DEFAULT 0.0")
-                } catch (e: Exception) {
-                    android.util.Log.w("AppDatabase", "globeLoadBalance column might already exist: ${e.message}")
                 }
             }
         }
-
         val MIGRATION_11_12 = object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                try {
+                // Existence guards replace blanket try/catch so genuine SQL failures
+                // propagate and roll the migration transaction back (fail-closed).
+                if (!db.columnExists("store_config", "loadServiceFee")) {
                     db.execSQL("ALTER TABLE store_config ADD COLUMN loadServiceFee REAL NOT NULL DEFAULT 2.0")
-                } catch (e: Exception) {
-                    android.util.Log.w("AppDatabase", "loadServiceFee column might already exist: ${e.message}")
                 }
-                try {
+                if (!db.columnExists("store_config", "gcashServiceFee")) {
                     db.execSQL("ALTER TABLE store_config ADD COLUMN gcashServiceFee REAL NOT NULL DEFAULT 10.0")
-                } catch (e: Exception) {
-                    android.util.Log.w("AppDatabase", "gcashServiceFee column might already exist: ${e.message}")
                 }
-                try {
+                if (!db.columnExists("store_config", "mayaServiceFee")) {
                     db.execSQL("ALTER TABLE store_config ADD COLUMN mayaServiceFee REAL NOT NULL DEFAULT 10.0")
-                } catch (e: Exception) {
-                    android.util.Log.w("AppDatabase", "mayaServiceFee column might already exist: ${e.message}")
                 }
-                try {
+                if (!db.columnExists("store_config", "mayaBankFee")) {
                     db.execSQL("ALTER TABLE store_config ADD COLUMN mayaBankFee REAL NOT NULL DEFAULT 15.0")
-                } catch (e: Exception) {
-                    android.util.Log.w("AppDatabase", "mayaBankFee column might already exist: ${e.message}")
                 }
             }
         }
-
         val MIGRATION_12_13 = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                try {
-                    db.execSQL("""
+                // Idempotent guard: skip if a prior (possibly interrupted) upgrade already ran.
+                if (db.columnExists("user_accounts", "pinHash")) return
+                if (db.tableExists("user_accounts")) {
+                    // Drop any leftover from a previously interrupted run before rebuilding.
+                    db.execSQL("DROP TABLE IF EXISTS `user_accounts_new`")
+                    db.execSQL(
+                        """
                         CREATE TABLE IF NOT EXISTS `user_accounts_new` (
                             `username` TEXT NOT NULL PRIMARY KEY,
                             `pinHash` TEXT NOT NULL,
                             `role` TEXT NOT NULL,
                             `barcodeId` TEXT NOT NULL DEFAULT ''
                         )
-                    """.trimIndent())
-                    db.execSQL("""
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        """
                         INSERT INTO `user_accounts_new` (`username`, `pinHash`, `role`, `barcodeId`)
                         SELECT `username`, `passwordHash`, `role`, `barcodeId` FROM `user_accounts`
-                    """.trimIndent())
+                        """.trimIndent()
+                    )
                     db.execSQL("DROP TABLE `user_accounts`")
                     db.execSQL("ALTER TABLE `user_accounts_new` RENAME TO `user_accounts`")
-                } catch (e: Exception) {
-                    android.util.Log.e("AppDatabase", "Error migrating user_accounts in 12->13", e)
+                } else if (db.tableExists("user_accounts_new")) {
+                    // Partial prior run already dropped the old table; finish the rename.
+                    db.execSQL("ALTER TABLE `user_accounts_new` RENAME TO `user_accounts`")
+                } else {
+                    // No recoverable state — throw so the migration transaction rolls back
+                    // (fail-closed) instead of silently leaving an inconsistent schema.
+                    error("MIGRATION_12_13: user_accounts table missing; cannot migrate 12 -> 13")
                 }
             }
         }
@@ -494,7 +519,10 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_12_13
                 )
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                .fallbackToDestructiveMigrationOnDowngrade()
+                                 // Room 2.7 deprecates the no-arg overload; the boolean overload's
+                 // `dropAllTables = false` is the behavior-identical replacement
+                 // (default for the Builder flag is false, matching the legacy no-arg call).
+                 .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = false)
                 // NOTE: Intentionally NO destructive-fallback migration for forward upgrades.
                 // This app declares hasFragileUserData=true (POS sales + inventory).
                 // If a schema upgrade ever fails/mismatches, Room will fail to open the
