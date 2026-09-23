@@ -67,7 +67,7 @@ jobs:
       - name: Run Unit Tests (Pre-Release Validation)
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
-             - name: Build Signed Release APK (Primary Artifact)
+      - name: Build Signed Release APK (Primary Artifact)
         env:
           KEYSTORE_PATH: ${{ secrets.KEYSTORE_PATH }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -93,7 +93,7 @@ jobs:
           TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
           mkdir -p release-assets
 
-                    # The signed release APK is the PRIMARY (and only) APK asset. A debug build is
+          # The signed release APK is the PRIMARY (and only) APK asset. A debug build is
           # never published - audit finding #8: debug APKs must not ship as release assets.
           if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
             cp app/build/outputs/apk/release/app-release.apk release-assets/StorePoint-${TAG}.apk
