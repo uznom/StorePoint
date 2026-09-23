@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -368,16 +370,18 @@ fun ExpressiveFabMenu(
             }
         }
 
-        // Main FAB — shape morphs circle <-> pill when expanded, squircles on press.
+        // Main FAB — morphs circle <-> cut-corner pill when expanded, squircles on press.
+        // Catalog BottomAppBarExpressiveFAB signature: CutCornerShape(topStart=24dp, bottomEnd=24dp) on active FAB,
+        // but here we animate that morph so the transition feels springy, not instant.
         val idleShape = rememberMorphShape(
-            target = if (expanded) ExpressiveShapeKind.PILL else ExpressiveShapeKind.CIRCLE,
+            target = if (expanded) ExpressiveShapeKind.CutCornerPill else ExpressiveShapeKind.CIRCLE,
             initial = ExpressiveShapeKind.CIRCLE,
-            reduceMotion = reduceMotion
+            reduceMotion = reduceMotion,
         )
         val pressedShape = rememberMorphShape(
             target = if (pressed) ExpressiveShapeKind.SQUIRCLE else ExpressiveShapeKind.CIRCLE,
             initial = ExpressiveShapeKind.CIRCLE,
-            reduceMotion = reduceMotion
+            reduceMotion = reduceMotion,
         )
         val pressScale by animateFloatAsState(
             targetValue = if (pressed) 0.92f else 1f,
@@ -397,7 +401,7 @@ fun ExpressiveFabMenu(
                 .width(fabWidth)
                 .height(56.dp)
                 .scale(pressScale)
-                .clip(if (expanded || pressed) pressedShape else idleShape)
+                .clip(if (pressed) pressedShape else idleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer)
                 .clickable(
                     interactionSource = interaction,
@@ -853,4 +857,103 @@ fun ExpressiveLargeAppBarTitle(title: String, modifier: Modifier = Modifier) {
         fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.onSurface,
     )
+}
+
+// ------------------------------------------------------------------ Grid Tile
+
+/**
+ * Expressive Grid Tile — catalog GridTile signature: asymmetric corner card with
+ * springy staggered scale animation, icon focal point, and title footer.
+ * Opt-in stagger via [staggerIndex]; 0 = instant, 1..N = springy entrance delay.
+ */
+@Composable
+fun ExpressiveGridTile(
+    title: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+    elevation: Dp = 4.dp,
+    staggerIndex: Int = 0,
+    labelStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.titleSmall,
+    labelColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+    iconSize: Dp = 48.dp,
+) {
+    val reduceMotion = LocalReduceMotion.current
+    val showDelay = staggerIndex * 40L
+    var appeared by androidx.compose.runtime.remember { mutableStateOf(!reduceMotion) }
+    androidx.compose.runtime.LaunchedEffect(staggerIndex) {
+        if (!reduceMotion && staggerIndex > 0) {
+            kotlinx.coroutines.delay(showDelay); appeared = true
+        }
+    }
+    val scale by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0.85f,
+        animationSpec = if (reduceMotion) snap() else spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "gridTileScale"
+    )
+
+    Card(
+        modifier = modifier
+            .aspectRatio(1f)
+            .scale(scale)
+            .clip(AsymmetricCornerShape(topStart = 16.dp, bottomEnd = 16.dp))
+            .clickable(onClick = onClick),
+        shape = AsymmetricCornerShape(topStart = 16.dp, bottomEnd = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    modifier = Modifier.size(iconSize),
+                    tint = iconTint,
+                )
+            }
+            Text(
+                text = title,
+                style = labelStyle,
+                modifier = Modifier.align(Alignment.Start),
+                color = labelColor,
+            )
+        }
+    }
+}
+
+private data class AsymmetricCornerShape(
+    val topStart: Dp,
+    val bottomEnd: Dp,
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.layout.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): androidx.compose.ui.graphics.Outline {
+        val path = androidx.compose.ui.graphics.Path().apply {
+            val w = size.width; val h = size.height
+            val ts = topStart.toPx(); val be = bottomEnd.toPx()
+            moveTo(ts, 0f)
+            lineTo(w, 0f)
+            lineTo(w, h - be)
+            quadraticBezierTo(w, h, w - be, h)
+            lineTo(ts, h)
+            quadraticBezierTo(0f, h, 0f, h - ts)
+            close()
+        }
+        return androidx.compose.ui.graphics.Outline.Generic(path)
+    }
 }

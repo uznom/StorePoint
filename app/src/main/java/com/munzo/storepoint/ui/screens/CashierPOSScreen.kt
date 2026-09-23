@@ -44,7 +44,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import com.munzo.storepoint.ui.theme.ExpressiveButtonShape
 import com.munzo.storepoint.ui.theme.ExpressiveSectionHeader
-import com.munzo.storepoint.ui.theme.ExpressiveCardShape
+import com.munzo.storepoint.ui.components.stagger
+import com.munzo.storepoint.ui.theme.AsymmetricCardShape
 import com.munzo.storepoint.ui.theme.ExpressiveChipShape
 import com.munzo.storepoint.ui.theme.expressiveGlassCard
 import com.munzo.storepoint.ui.theme.ExpressiveSplitButton
@@ -90,6 +91,9 @@ fun CashierPOSScreen(
     val parkedList by viewModel.parkedTransactions.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
+    // LAYA fast-response: debounce keystrokes so heavy catalog filtering recomposes ~7x/sec, not per keypress.
+    var debouncedSearchQuery by remember { mutableStateOf("") }
+    LaunchedEffect(searchQuery) { kotlinx.coroutines.delay(140); debouncedSearchQuery = searchQuery }
     var selectedCategory by remember { mutableStateOf<Category?>(null) }
     var activePortraitTab by remember { mutableStateOf(0) }
     var activeCatalogSection by remember { mutableStateOf(0) } // 0 = Standard Products, 1 = Digital Services
@@ -148,12 +152,14 @@ fun CashierPOSScreen(
 
     val selectedCartUoms by viewModel.selectedCartUoms.collectAsState()
 
-    // Calculations based exclusively on CHECKED shopping cart items
-    val activeCartItems = remember(cartItems) {
+    // Calculations based exclusively on CHECKED shopping cart items.
+    // LAYA fast-response fix: plain derivedStateOf (not nested in remember) so cart
+    // + checkbox changes always trigger exactly one recompute, never a stale snapshot.
+    val activeCartItems by remember(cartItems, checkedCartItems) {
         derivedStateOf {
             cartItems.filter { checkedCartItems[it.first.id] != false }
         }
-    }.value
+    }
     val doubleTaxRate = storeConfig?.taxPercentage ?: 12.0
     val grossCartTotal = activeCartItems.sumOf { 
         val uom = selectedCartUoms[it.first.id] ?: com.munzo.storepoint.data.UomOption("Base Unit", 1, it.first.price)
@@ -1020,43 +1026,46 @@ fun CashierPOSScreen(
                                 }
                             }
 
-                            // Product Grid Catalog
-                            val filteredProducts = products.filter { p ->
-                                val categoryName = categories.find { it.id == p.categoryId }?.name ?: ""
+                            // Product Grid Catalog — LAYA fast-response: memoized, debounced, O(1) category map.
+                            val categoryNameById = remember(categories) { categories.associate { it.id to it.name } }
+                            val effectiveQuery = debouncedSearchQuery.trim()
+                            val filteredProducts = remember(products, categoryNameById, selectedCategory, effectiveQuery) {
+                                products.filter { p ->
+                                val categoryName = categoryNameById[p.categoryId] ?: ""
                                 val isOldDigital = p.name.contains("GCash Cash-In", ignoreCase = true) || 
                                                    p.name.contains("GCash Cash-Out", ignoreCase = true) || 
                                                    p.name.contains("Smart Load", ignoreCase = true) ||
                                                    categoryName.contains("Digital", ignoreCase = true)
                                 
                                 !isOldDigital && (selectedCategory == null || p.categoryId == selectedCategory?.id) &&
-                                        (p.name.contains(searchQuery, ignoreCase = true) || p.barcode.contains(searchQuery))
+                                        (effectiveQuery.isBlank() || p.name.contains(effectiveQuery, ignoreCase = true) || p.barcode.contains(effectiveQuery))
                             }
 
-                            val searchQueryMatchedDigital = searchQuery.isNotEmpty() && (
-                                searchQuery.contains("gcash", ignoreCase = true) || 
-                                searchQuery.contains("g-cash", ignoreCase = true) || 
-                                searchQuery.contains("g cash", ignoreCase = true) || 
-                                searchQuery.contains("maya", ignoreCase = true) || 
-                                searchQuery.contains("load", ignoreCase = true) || 
-                                searchQuery.contains("smart", ignoreCase = true) || 
-                                searchQuery.contains("tnt", ignoreCase = true) || 
-                                searchQuery.contains("globe", ignoreCase = true) || 
-                                searchQuery.contains("tm", ignoreCase = true)
+                            val searchQueryMatchedDigital = effectiveQuery.isNotEmpty() && (
+                                effectiveQuery.contains("gcash", ignoreCase = true) || 
+                                effectiveQuery.contains("g-cash", ignoreCase = true) || 
+                                effectiveQuery.contains("g cash", ignoreCase = true) || 
+                                effectiveQuery.contains("maya", ignoreCase = true) || 
+                                effectiveQuery.contains("load", ignoreCase = true) || 
+                                effectiveQuery.contains("smart", ignoreCase = true) || 
+                                effectiveQuery.contains("tnt", ignoreCase = true) || 
+                                effectiveQuery.contains("globe", ignoreCase = true) || 
+                                effectiveQuery.contains("tm", ignoreCase = true)
                             )
                             val isDigitalActive = searchQueryMatchedDigital
 
                             if (isDigitalActive) {
                                 val initialService = when {
-                                    searchQuery.contains("gcash", ignoreCase = true) || searchQuery.contains("g-cash", ignoreCase = true) || searchQuery.contains("g cash", ignoreCase = true) -> "GCash"
-                                    searchQuery.contains("maya", ignoreCase = true) -> "Maya"
-                                    searchQuery.contains("load", ignoreCase = true) || searchQuery.contains("smart", ignoreCase = true) || searchQuery.contains("tnt", ignoreCase = true) || searchQuery.contains("globe", ignoreCase = true) || searchQuery.contains("tm", ignoreCase = true) -> "Load"
+                                    effectiveQuery.contains("gcash", ignoreCase = true) || effectiveQuery.contains("g-cash", ignoreCase = true) || effectiveQuery.contains("g cash", ignoreCase = true) -> "GCash"
+                                    effectiveQuery.contains("maya", ignoreCase = true) -> "Maya"
+                                    effectiveQuery.contains("load", ignoreCase = true) || effectiveQuery.contains("smart", ignoreCase = true) || effectiveQuery.contains("tnt", ignoreCase = true) || effectiveQuery.contains("globe", ignoreCase = true) || effectiveQuery.contains("tm", ignoreCase = true) -> "Load"
                                     else -> "GCash"
                                 }
                                 val initialNetwork = when {
-                                    searchQuery.contains("smart", ignoreCase = true) -> "Smart"
-                                    searchQuery.contains("tnt", ignoreCase = true) -> "TNT"
-                                    searchQuery.contains("globe", ignoreCase = true) -> "Globe"
-                                    searchQuery.contains("tm", ignoreCase = true) -> "TM"
+                                    effectiveQuery.contains("smart", ignoreCase = true) -> "Smart"
+                                    effectiveQuery.contains("tnt", ignoreCase = true) -> "TNT"
+                                    effectiveQuery.contains("globe", ignoreCase = true) -> "Globe"
+                                    effectiveQuery.contains("tm", ignoreCase = true) -> "TM"
                                     else -> "Smart"
                                 }
                                 Box(
@@ -1093,8 +1102,12 @@ fun CashierPOSScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    items(12) {
-                                        ShimmerProductCard()
+                                    items(8) { index ->
+                                        ShimmerProductCard().let { composable ->
+                                            composable.modifier = composable.modifier
+                                                .clip(AsymmetricCardShape(14.dp, 14.dp))
+                                        composable
+                                        }
                                     }
                                 }
                             } else if (filteredProducts.isEmpty()) {
@@ -1132,10 +1145,10 @@ fun CashierPOSScreen(
                                     verticalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    items(filteredProducts) { item ->
+                                    items(items = filteredProducts, key = { it.id }, contentType = { "product" }) { item ->
                                         val isLowStock = item.stockCount in 1..5
                                         val isOutOfStock = item.stockCount <= 0
-                                        val availableUoms = viewModel.getActiveUomsForProduct(item)
+                                        val availableUoms = remember(item.id, item.price, item.hasCustomUom, item.hasStick10s, item.hasStick20s, item.hasReam, item.hasMasterCase) { viewModel.getActiveUomsForProduct(item) }
                                         val isGCash = item.name.contains("GCash", ignoreCase = true)
                                         val isSmart = item.name.contains("Smart", ignoreCase = true) || item.name.contains("TNT", ignoreCase = true)
                                         val isGlobe = item.name.contains("Globe", ignoreCase = true) || item.name.contains("TM", ignoreCase = true)
@@ -1153,8 +1166,9 @@ fun CashierPOSScreen(
                                                         }
                                                     }
                                                 }
+                                                .stagger((item.id and 0x3F) % 8, 40L)
                                                 .testTag("product_card_${item.id}"),
-                                            shape = ExpressiveCardShape,
+                                            shape = AsymmetricCardShape(16.dp, 16.dp),
                                             colors = CardDefaults.cardColors(
                                                 containerColor = if (isOutOfStock) {
                                                     MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.4f)
@@ -1187,7 +1201,7 @@ fun CashierPOSScreen(
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    val categoryName = categories.find { it.id == item.categoryId }?.name ?: "General"
+                                                    val categoryName = categoryNameById[item.categoryId] ?: "General"
                                                     Surface(
                                                         shape = ExpressiveChipShape,
                                                         color = MaterialTheme.colorScheme.primaryContainer,

@@ -131,29 +131,40 @@ fun Modifier.glassPanel(
  * Triggers organic spring elasticity when matching standard user press feedback.
  */
 @Composable
-fun Modifier.tactileBounce(onClick: (() -> Unit)? = null): Modifier {
+fun Modifier.tactileBounce(
+    onClick: (() -> Unit)? = null,
+    // LAYA fast-response: press feedback defaults to cheap + static so catalog grids
+    // scroll at 60fps. Opt specific hero surfaces into the spring with pressFeedback = true.
+    pressFeedback: Boolean = false
+): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    
+
+    // Ripple = GPU-cheap, zero-recomposition press feedback (default everywhere).
+    // Spring scale = expressive but recomposes on every press frame (hero surfaces only).
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1.0f,
+        targetValue = if (pressFeedback && isPressed) 0.96f else 1.0f,
         animationSpec = ExpressiveMotion.springBouncy(),
         label = "PressBounce"
     )
 
-    val scaledModifier = this.graphicsLayer {
-        scaleX = scale
-        scaleY = scale
+    val pressedModifier = if (pressFeedback) {
+        this.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+    } else {
+        this
     }
 
     return if (onClick != null) {
-        scaledModifier.clickable(
+        pressedModifier.clickable(
             interactionSource = interactionSource,
-            indication = null,
+            indication = androidx.compose.material3.ripple(),
             onClick = onClick
         )
     } else {
-        scaledModifier
+        pressedModifier
     }
 }
 
@@ -202,17 +213,17 @@ fun Modifier.expressiveGlassCard(
     elevation: Dp = 2.dp,
     blurRadius: Dp = 0.dp
 ): Modifier {
-    val glassBg = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.88f)
+    // LAYA fast-response: remember gradient/shadow inputs so scrolling lists do not`r`n    // reallocate Brush + shadow layers on every recomposition (major GPU win).`r`n    val glassBg = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.88f)
     val highlightColor = accentGlow ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
-    val specularBrush = Brush.verticalGradient(
+    val specularBrush = remember(glassBg, highlightColor, isDark) { Brush.verticalGradient(
         colors = listOf(
             Color.White.copy(alpha = if (isDark) 0.25f else 0.50f),
             highlightColor,
             Color.Transparent
         )
-    )
+    ) }
 
     val blurred = if (blurRadius > 0.dp) {
         this.blur(blurRadius, edgeTreatment = BlurredEdgeTreatment.Rectangle)
@@ -220,19 +231,20 @@ fun Modifier.expressiveGlassCard(
         this
     }
 
+    val cardShape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     return blurred
         .shadow(
             elevation = elevation,
-            shape = RoundedCornerShape(cornerRadius),
+            shape = cardShape,
             ambientColor = highlightColor,
             spotColor = highlightColor
         )
         .graphicsLayer {
             clip = true
-            shape = RoundedCornerShape(cornerRadius)
+            shape = cardShape
         }
-        .background(glassBg, RoundedCornerShape(cornerRadius))
-        .border(1.dp, specularBrush, RoundedCornerShape(cornerRadius))
+        .background(glassBg, cardShape)
+        .border(1.dp, specularBrush, cardShape)
 }
 
 /**
@@ -340,7 +352,19 @@ fun ExpressiveSplitButton(
                     .background(contentColor.copy(alpha = 0.35f))
             )
 
-            // Secondary Dropdown Interaction Block
+            // Secondary Dropdown Interaction Block — rotating chevron on press
+            // (catalog SplitButtonVariant1 signature: 180° spring rotation on toggle).
+            val isSecondaryPressed by secIntSource.collectIsPressedAsState()
+            val arrowRotation by animateFloatAsState(
+                targetValue = if (isSecondaryPressed) 180f else 0f,
+                animationSpec = AnimationSpec(
+                    durationMillis = 220,
+                    delayMillis = 0,
+                    easing = FastOutSlowInEasing,
+                    visibilityThreshold = 0.01f
+                ),
+                label = "secArrowRotation"
+            )
             Box(
                 modifier = Modifier
                     .width(48.dp)
@@ -353,7 +377,9 @@ fun ExpressiveSplitButton(
                     imageVector = Icons.Default.ArrowDropDown,
                     contentDescription = "Expand Split Options",
                     tint = contentColor.copy(alpha = 0.85f),
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier
+                        .size(28.dp)
+                        .graphicsLayer { this.rotationZ = arrowRotation }
                 )
             }
         }
