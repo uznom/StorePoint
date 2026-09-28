@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.munzo.storepoint.data.*
 import com.munzo.storepoint.util.APP_VERSION
 import com.munzo.storepoint.util.AppUpdateInfo
+import com.munzo.storepoint.util.BiometricAuthHelper
 import com.munzo.storepoint.util.CrashDiagnosticsManager
 import com.munzo.storepoint.util.DatabaseBackupManager
 import com.munzo.storepoint.util.EscPosHelper
@@ -367,11 +368,127 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         isBiometricEnabled.value = enabled
     }
 
+    /**
+     * Progressive lockout schedule, indexed by consecutive-failure count.
+     *
+     * A 4-digit PIN has a 10,000-combination keyspace, so the previous flat
+     * 5-try/30s lockout was too weak to compensate. The window now grows on each
+     * successive failure (30s -> 60s -> 120s -> 300s) and is tracked *per username*,
+     * so an attacker cannot lock every staff account out at once.
+     */
+    private val lockoutScheduleMs = longArrayOf(30_000L, 60_000L, 120_000L, 300_000L)
+
+    private fun lockoutWindowFor(failCount: Int): Long =
+        lockoutScheduleMs[failCount.coerceAtMost(lockoutScheduleMs.lastIndex)]
+
+    /** Accounts still holding a pre-migration 6-digit credential that must reset. */
+    val usersPendingPinReset: StateFlow<List<User>> = repository.usersPendingPinReset
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Users who have bound a device biometric, used to drive fingerprint auto-login. */
+    val biometricEnrolledUsers: StateFlow<List<User>> = repository.biometricEnrolledUsers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Completes a user's one-time migration to a 4-digit PIN.
+     *
+     * The caller must have already authorized this via the current credential. Enforces
+     * the weak-PIN policy before persisting.
+     */
+    fun resetPin(
+        username: String,
+        newPin: String,
+        onSuccess: (User) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            if (!SecurityHelper.isValidPin(newPin)) {
+                onFailure("PIN must be exactly ${SecurityHelper.PIN_LENGTH} digits.")
+                return@launch
+            }
+            if (SecurityHelper.isWeakPin(newPin)) {
+                onFailure("That PIN is too easy to guess. ${SecurityHelper.pinPolicyHint()}")
+                return@launch
+            }
+            val user = repository.getUserByUsername(username)
+            if (user == null) {
+                onFailure("Account not found.")
+                return@launch
+            }
+            val updated = user.copy(
+                pinHash = SecurityHelper.hashPin(newPin),
+                pinResetRequired = false
+            )
+            repository.updatePinAfterReset(username, updated.pinHash)
+            onSuccess(updated)
+        }
+    }
+
+    /**
+     * Authorizes the forced PIN migration using the account's existing credential.
+     *
+     * Accepts the legacy 6-digit format (and 4-digit, for users already reset) via
+     * [SecurityHelper.verifyPinLenient]. Rate-limited on the same escalating schedule
+     * as normal sign-in, because this is the highest-value target on the terminal.
+     */
+    fun verifyPinResetAuthorization(
+        username: String,
+        currentPin: String,
+        onSuccess: (User) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val lockKey = "pinreset_$username"
+            val lockedUntil = prefs.getLong("${lockKey}_locked_until", 0L)
+            if (now < lockedUntil) {
+                val remainSec = ((lockedUntil - now) / 1000).toInt().coerceAtLeast(1)
+                onFailure("Too many attempts. Try again in ${remainSec}s.")
+                return@launch
+            }
+
+            val user = repository.getUserByUsername(username)
+            if (user == null) {
+                onFailure("Account not found.")
+                return@launch
+            }
+
+            val verification = SecurityHelper.verifyPinLenient(currentPin, user.pinHash)
+            if (verification.isMatch) {
+                prefs.edit().putInt("${lockKey}_fails", 0).putLong("${lockKey}_locked_until", 0L).apply()
+                onSuccess(user)
+                return@launch
+            }
+
+            val fails = prefs.getInt("${lockKey}_fails", 0) + 1
+            if (fails >= 4) {
+                val window = lockoutWindowFor(fails - 4)
+                prefs.edit()
+                    .putInt("${lockKey}_fails", 0)
+                    .putLong("${lockKey}_locked_until", now + window)
+                    .apply()
+                onFailure("Too many attempts. Locked for ${window / 1000} seconds.")
+            } else {
+                val remaining = 4 - fails
+                prefs.edit().putInt("${lockKey}_fails", fails).apply()
+                onFailure("Current PIN incorrect. $remaining attempt${if (remaining == 1) "" else "s"} left.")
+            }
+        }
+    }
+
+    /**
+     * Primary sign-in path.
+     *
+     * Accepts a 4-digit PIN. Users flagged `pinResetRequired` are refused rather than
+     * signed in, because their stored credential is still the legacy 6-digit format.
+     * On success the account is auto-enrolled for fingerprint sign-in so subsequent
+     * launches reach the register in zero taps.
+     */
     fun login(username: String, pass: String, onSuccess: (User) -> Unit, onFailure: (String) -> Unit) {
         viewModelScope.launch {
-            // M6: Rate-limiting / lockout after repeated failed logins
             val now = System.currentTimeMillis()
-            val lockedUntil = prefs.getLong("login_locked_until", 0L)
+            val lockKey = "login_fail_$username"
+            val lockedUntil = prefs.getLong("${lockKey}_locked_until", 0L)
             if (now < lockedUntil) {
                 val remainSec = ((lockedUntil - now) / 1000).toInt().coerceAtLeast(1)
                 onFailure("Too many failed attempts. Try again in ${remainSec}s.")
@@ -379,33 +496,73 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             val user = repository.getUserByUsername(username)
-            if (user != null) {
+            if (user != null && !user.pinResetRequired) {
                 val verification = SecurityHelper.verifyPin(pass, user.pinHash)
                 if (verification.isMatch) {
-                    // Successful authentication resets the failure counter
-                    prefs.edit().putInt("login_fail_count", 0).putLong("login_locked_until", 0L).apply()
+                    prefs.edit().putInt("${lockKey}_fails", 0).putLong("${lockKey}_locked_until", 0L).apply()
+                    var signedIn = user
                     if (verification.needsUpgrade) {
-                        val modernHash = SecurityHelper.hashPin(pass)
-                        repository.saveUser(user.copy(pinHash = modernHash))
+                        signedIn = user.copy(pinHash = SecurityHelper.hashPin(pass))
+                        repository.saveUser(signedIn)
                     }
-                    activeUser.value = user
-                    CrashDiagnosticsManager.currentCashier = user.username
-                    prefs.edit().putString("last_logged_in_user", user.username).apply()
-                    lastLoggedInUser.value = user.username
-                    onSuccess(user)
+                    signedIn = maybeAutoEnrollBiometric(signedIn)
+                    completeLogin(signedIn, onSuccess)
                     return@launch
                 }
             }
 
-            // Failed attempt bookkeeping
-            val fails = prefs.getInt("login_fail_count", 0) + 1
-            if (fails >= 5) {
-                prefs.edit().putInt("login_fail_count", 0).putLong("login_locked_until", now + 30_000L).apply()
-                onFailure("Too many failed attempts. Login locked for 30 seconds.")
+            // Failed attempt bookkeeping with a growing, per-account lockout window.
+            val fails = prefs.getInt("${lockKey}_fails", 0) + 1
+            if (fails >= 4) {
+                val window = lockoutWindowFor(fails - 4)
+                prefs.edit()
+                    .putInt("${lockKey}_fails", 0)
+                    .putLong("${lockKey}_locked_until", now + window)
+                    .apply()
+                onFailure("Too many failed attempts. Locked for ${window / 1000} seconds.")
             } else {
-                prefs.edit().putInt("login_fail_count", fails).apply()
-                onFailure("Incorrect local username or 6-digit PIN.")
+                prefs.edit().putInt("${lockKey}_fails", fails).apply()
+                val remaining = 4 - fails
+                val msg = if (user?.pinResetRequired == true) {
+                    "This account still needs a new ${SecurityHelper.PIN_LENGTH}-digit PIN."
+                } else {
+                    "Incorrect username or ${SecurityHelper.PIN_LENGTH}-digit PIN. " +
+                        "$remaining attempt${if (remaining == 1) "" else "s"} left."
+                }
+                onFailure(msg)
             }
+        }
+    }
+
+    /** Shared post-authentication bookkeeping used by PIN and fingerprint sign-in. */
+    private suspend fun completeLogin(user: User, onSuccess: (User) -> Unit) {
+        activeUser.value = user
+        CrashDiagnosticsManager.currentCashier = user.username
+        prefs.edit().putString("last_logged_in_user", user.username).apply()
+        lastLoggedInUser.value = user.username
+        playBeep()
+        onSuccess(user)
+    }
+
+    /**
+     * Binds a device biometric to the account on first successful authentication.
+     *
+     * Persisted to `user_accounts.biometricEnrolled` so the login screen can offer
+     * zero-tap fingerprint sign-in on the next launch. Respects the admin's global
+     * biometric kill-switch.
+     */
+    private suspend fun maybeAutoEnrollBiometric(user: User): User {
+        if (user.biometricEnrolled) return user
+        if (!isBiometricEnabled.value) return user
+        if (!BiometricAuthHelper.checkAvailability(getApplication()).isAvailable) return user
+        repository.setBiometricEnrolled(user.username, true)
+        return user.copy(biometricEnrolled = true)
+    }
+
+    /** Explicitly (un)binds a biometric for a user from the Admin security screen. */
+    fun setBiometricEnrolledForUser(username: String, enrolled: Boolean) {
+        viewModelScope.launch {
+            repository.setBiometricEnrolled(username, enrolled)
         }
     }
 
@@ -453,29 +610,37 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Fingerprint sign-in.
+     *
+     * Resolves to exactly ONE explicitly-enrolled account. The previous implementation
+     * guessed "the first non-admin user" and hard-blocked admins from biometric
+     * sign-in entirely; both behaviours are removed. Resolution order is:
+     *   1. the caller-supplied username, if that account is enrolled;
+     *   2. otherwise the last user to sign in, if enrolled.
+     * If neither is enrolled the caller is told to fall back to the PIN pad.
+     */
     fun loginWithBiometric(targetUsername: String?, onSuccess: (User) -> Unit, onFailure: (String) -> Unit) {
         viewModelScope.launch {
-            val usernameToFind = targetUsername ?: prefs.getString("last_logged_in_user", null)
-            val user = if (usernameToFind != null) {
-                repository.getUserByUsername(usernameToFind)
-            } else {
-                repository.getAllUsersSync().firstOrNull { it.role != "ADMIN" }
+            val requested = targetUsername?.takeIf { it.isNotBlank() }
+                ?: prefs.getString("last_logged_in_user", null)
+
+            val user = requested?.let { repository.getUserByUsername(it) }
+
+            if (user == null) {
+                onFailure("No account found for fingerprint sign-in.")
+                return@launch
+            }
+            if (!user.biometricEnrolled) {
+                onFailure("${user.username} has not enrolled a fingerprint. Use your PIN instead.")
+                return@launch
+            }
+            if (user.pinResetRequired) {
+                onFailure("${user.username} must set a new ${SecurityHelper.PIN_LENGTH}-digit PIN first.")
+                return@launch
             }
 
-            if (user != null) {
-                if (user.role.equals("ADMIN", ignoreCase = true)) {
-                    onFailure("Admin accounts require PIN sign-in. Biometric unlock is available for cashiers only.")
-                    return@launch
-                }
-                activeUser.value = user
-                CrashDiagnosticsManager.currentCashier = user.username
-                prefs.edit().putString("last_logged_in_user", user.username).apply()
-                lastLoggedInUser.value = user.username
-                playBeep()
-                onSuccess(user)
-            } else {
-                onFailure("No cashier account found for biometric sign-in.")
-            }
+            completeLogin(user, onSuccess)
         }
     }
 

@@ -87,6 +87,26 @@ class StorePointRepository(private val db: AppDatabase) {
         userDao.deleteUser(username)
     }
 
+    /** Accounts that still hold a pre-migration credential and must choose a 4-digit PIN. */
+    val usersPendingPinReset: Flow<List<User>> = userDao.getUsersPendingPinReset()
+
+    /** Accounts with a device biometric bound, used to drive fingerprint auto-login. */
+    val biometricEnrolledUsers: Flow<List<User>> = userDao.getBiometricEnrolledUsers()
+
+    suspend fun setBiometricEnrolled(username: String, enrolled: Boolean) {
+        userDao.setBiometricEnrolled(username, enrolled)
+    }
+
+    /**
+     * Atomically swaps a legacy credential for a 4-digit PIN and clears the reset flag.
+     *
+     * Uses a targeted UPDATE rather than a full-row REPLACE so it cannot clobber
+     * concurrent changes to the account's other columns.
+     */
+    suspend fun updatePinAfterReset(username: String, newPinHash: String) {
+        userDao.updatePinAfterReset(username, newPinHash)
+    }
+
     // --- Categories ---
     val allCategories: Flow<List<Category>> = categoryDao.getAllCategories()
 

@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +36,14 @@ import com.munzo.storepoint.ui.screens.SetupScreen
 import com.munzo.storepoint.ui.theme.ExpressiveMorphingLoader
 import com.munzo.storepoint.ui.theme.MyApplicationTheme
 
-class MainActivity : ComponentActivity() {
+/**
+ * StorePoint's single host activity.
+ *
+ * Extends [FragmentActivity] (a [ComponentActivity] subclass) purely so the
+ * `androidx.biometric` prompt can attach its fragment — fingerprint-first sign-in is
+ * the primary auth path. All other behaviour is unchanged.
+ */
+class MainActivity : FragmentActivity() {
 
     private val viewModel: StorePointViewModel by viewModels()
 
