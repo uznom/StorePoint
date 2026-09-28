@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +40,8 @@ import com.munzo.storepoint.ui.theme.ExpressiveCardShape
 import com.munzo.storepoint.ui.theme.tactileBounce
 import com.munzo.storepoint.ui.theme.glassPanel
 import com.munzo.storepoint.ui.theme.ExpressiveOtpPinInput
+import com.munzo.storepoint.ui.theme.shakeOnTrigger
+import com.munzo.storepoint.util.SecurityHelper
 import com.munzo.storepoint.ui.components.ExpressiveAction
 import com.munzo.storepoint.ui.components.ExpressiveActionRow
 import com.munzo.storepoint.ui.components.ExpressiveButton
@@ -172,9 +175,100 @@ fun LoginScreen(
     val isCompact = windowLayout == WindowLayout.Compact
     val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsState()
     val lastUser by viewModel.lastLoggedInUser.collectAsState()
-    val activity = LocalContext.current as? android.app.Activity
-    val isBiometricAvailable = remember(context) {
-        com.munzo.storepoint.util.BiometricAuthHelper.isBiometricSupported(context)
+    val pendingResetUsers by viewModel.usersPendingPinReset.collectAsState()
+
+    // Fingerprint-first: the primary path on a device with a working sensor.
+    val fragmentActivity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+    val biometricAvailability = remember(context) {
+        com.munzo.storepoint.util.BiometricAuthHelper.checkAvailability(context)
+    }
+    val isBiometricAvailable = biometricAvailability.isAvailable
+
+    // The account the fingerprint prompt will resolve to on launch.
+    // `suppressedBiometric` is a local opt-out: "Sign in as someone else" suppresses
+    // the auto-prompt for the rest of this composition without clearing persisted
+    // state, so a legitimate later return still gets the zero-tap path.
+    val suppressedBiometric = remember { mutableStateOf(false) }
+    val effectiveLastUser = if (suppressedBiometric.value) null else lastUser
+    val biometricTargetUser = remember(effectiveLastUser, pendingResetUsers) {
+        effectiveLastUser?.takeIf { it !in pendingResetUsers.map(User::username) }
+    }
+    val canOfferBiometric = isBiometricEnabled && isBiometricAvailable &&
+        fragmentActivity != null && biometricTargetUser != null
+
+    // Inline error surface: a shake + message beats a transient toast the cashier
+    // can miss mid-rush (Laws of UX: Recognition over Recall, Doherty Threshold).
+    var loginError by remember { mutableStateOf("") }
+    var shakeTrigger by remember { mutableIntStateOf(0) }
+
+    // Auto-login: fires as soon as the 4th digit lands, so the common case costs
+    // zero extra taps (Laws of UX: Doherty Threshold, Goal-Gradient Effect).
+    fun attemptLogin(pin: String) {
+        if (username.isBlank()) {
+            loginError = "Enter your username first."
+            return
+        }
+        isAuthenticating = true
+        loginError = ""
+        viewModel.login(
+            username = username.trim(),
+            pass = pin,
+            onSuccess = { user ->
+                isAuthenticating = false
+                onLoginSuccess(user.role)
+            },
+            onFailure = { errorMsg ->
+                isAuthenticating = false
+                loginError = errorMsg
+                password = ""            // clear so a retry starts clean
+                shakeTrigger++           // drive the error micro-interaction
+            }
+        )
+    }
+
+    // Fires the system prompt. Split out so both the auto-trigger on launch and the
+    // manual button share identical behaviour.
+    fun launchBiometric(target: String) {
+        val host = fragmentActivity ?: return
+        com.munzo.storepoint.util.BiometricAuthHelper.authenticate(
+            activity = host,
+            title = "Fingerprint Sign-In",
+            subtitle = "Verify to open the register as $target",
+            onOutcome = { outcome, message ->
+                when (outcome) {
+                    com.munzo.storepoint.util.BiometricAuthHelper.BiometricOutcome.SUCCESS ->
+                        Unit // handled by onSuccess below
+                    com.munzo.storepoint.util.BiometricAuthHelper.BiometricOutcome.FALLBACK ->
+                        Unit // user chose the PIN pad; no error to show
+                    com.munzo.storepoint.util.BiometricAuthHelper.BiometricOutcome.UNAVAILABLE ->
+                        loginError = message
+                    else -> loginError = message // recoverable / fatal both route to PIN
+                }
+            },
+            onSuccess = {
+                isAuthenticating = true
+                viewModel.loginWithBiometric(
+                    targetUsername = target,
+                    onSuccess = { user ->
+                        isAuthenticating = false
+                        onLoginSuccess(user.role)
+                    },
+                    onFailure = { err ->
+                        isAuthenticating = false
+                        loginError = err
+                    }
+                )
+            }
+        )
+    }
+
+    // Zero-tap return: the previous user is almost always the one returning to the
+    // register, so prompt for them automatically on launch (Laws of UX: Doherty
+    // Threshold + Goal-Gradient — no taps to reach the goal).
+    LaunchedEffect(canOfferBiometric, biometricTargetUser) {
+        if (canOfferBiometric && !isAuthenticating) {
+            biometricTargetUser?.let { launchBiometric(it) }
+        }
     }
 
 
@@ -299,7 +393,7 @@ fun LoginScreen(
                 ) {
                     HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
                     Text(
-                        "OR ENTER 6-DIGIT PIN",
+                        "OR ENTER ${SecurityHelper.PIN_LENGTH}-DIGIT PIN",
                         modifier = Modifier.padding(horizontal = 12.dp),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -311,7 +405,11 @@ fun LoginScreen(
 
                 // --- MANUAL LOGIN CARD ---
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Rejection feedback: a short shake paired with the inline error
+                        // text, so a wrong PIN is unmissable even mid-checkout.
+                        .shakeOnTrigger(trigger = shakeTrigger),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     ),
@@ -337,9 +435,11 @@ fun LoginScreen(
                             shape = RoundedCornerShape(16.dp)
                         )
 
+                        // Shakes on failed auth: a visible, non-blocking confirmation
+                        // that the attempt was rejected (micro-interaction).
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                "6-Digit Security PIN",
+                                "${SecurityHelper.PIN_LENGTH}-Digit Security PIN",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -348,42 +448,42 @@ fun LoginScreen(
                             ExpressiveOtpPinInput(
                                 pin = password,
                                 onPinChange = { password = it },
-                                pinLength = 6,
+                                // Auto-login the instant the final digit lands — no
+                                // "Sign In" tap required in the common case.
+                                onPinComplete = { completed -> attemptLogin(completed) },
+                                pinLength = SecurityHelper.PIN_LENGTH,
                                 isMasked = true,
-                                modifier = Modifier.fillMaxWidth().testTag("password_input")
+                                isError = loginError.isNotEmpty(),
+                                errorMessage = loginError.ifEmpty { null },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("password_input")
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (password.length == 6) "✓ 6-digit security PIN ready" else "${password.length}/6 digits (numbers only)",
+                                text = when {
+                                    isAuthenticating -> "Verifying…"
+                                    password.length == SecurityHelper.PIN_LENGTH -> "✓ PIN ready — verifying automatically"
+                                    else -> "${password.length}/${SecurityHelper.PIN_LENGTH} digits (numbers only)"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (password.length == 6) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                color = when {
+                                    isAuthenticating -> MaterialTheme.colorScheme.primary
+                                    password.length == SecurityHelper.PIN_LENGTH -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.outline
+                                }
                             )
                         }
 
+                        // Manual sign-in is retained as an explicit, discoverable action
+                        // (Redundancy over a hidden auto-submit) and doubles as the
+                        // retry affordance after an error.
                         ExpressiveButton(
-                            onClick = {
-                                if (username.isBlank() || password.length != 6) {
-                                    Toast.makeText(context, "Please enter your username and full 6-digit security PIN.", Toast.LENGTH_SHORT).show()
-                                    return@ExpressiveButton
-                                }
-                                isAuthenticating = true
-                                viewModel.login(
-                                    username = username.trim(),
-                                    pass = password,
-                                    onSuccess = { user ->
-                                        isAuthenticating = false
-                                        onLoginSuccess(user.role)
-                                    },
-                                    onFailure = { errorMsg ->
-                                        isAuthenticating = false
-                                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                                    }
-                                )
-                            },
+                            onClick = { attemptLogin(password) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("submit_login_button"),
-                            label = if (isAuthenticating) "Authorizing..." else "Sign In",
+                            label = if (isAuthenticating) "Authorizing…" else "Sign In",
                             icon = Icons.Default.Login,
                             variant = ExpressiveButtonVariant.FILLED,
                             size = ExpressiveButtonSize.L,
@@ -395,37 +495,39 @@ fun LoginScreen(
 
                 // Secondary actions: side-by-side on tablets/desktop, stacked full-width on phones.
                 val secondaryActions = buildList {
-                    if (isBiometricEnabled && isBiometricAvailable && activity != null) {
+                    // Fingerprint is the PRIMARY path, so it is promoted to the first
+                    // action and given the highest-emphasis variant (Von Restorff
+                    // effect: the visually distinct option is the one remembered).
+                    if (canOfferBiometric) {
                         add(
                             ExpressiveAction(
-                                label = "Biometric Unlock",
+                                label = "Sign in with fingerprint",
                                 icon = Icons.Default.Fingerprint,
-                                variant = ExpressiveButtonVariant.TONAL,
-                                size = ExpressiveButtonSize.M,
+                                variant = ExpressiveButtonVariant.FILLED,
+                                size = ExpressiveButtonSize.L,
                                 testTag = "biometric_login_button",
+                                onClick = { launchBiometric(biometricTargetUser!!) }
+                            )
+                        )
+                    }
+
+                    // Escape hatch: a failed sensor or a different staff member must
+                    // never strand the user on a screen with no way forward.
+                    if (isBiometricAvailable && lastUser != null) {
+                        add(
+                            ExpressiveAction(
+                                label = "Sign in as someone else",
+                                icon = Icons.Default.PersonOutline,
+                                variant = ExpressiveButtonVariant.TEXT,
+                                size = ExpressiveButtonSize.S,
+                                testTag = "switch_user_button",
                                 onClick = {
-                                    com.munzo.storepoint.util.BiometricAuthHelper.authenticate(
-                                        activity = activity,
-                                        title = "StorePoint Biometric Sign-In",
-                                        subtitle = "Scan fingerprint to unlock register",
-                                        negativeButtonText = "Use PIN",
-                                        onSuccess = {
-                                            val target = if (username.isNotBlank()) username.trim() else lastUser
-                                            viewModel.loginWithBiometric(
-                                                targetUsername = target,
-                                                onSuccess = { user ->
-                                                    Toast.makeText(context, "Biometric Verified: Welcome ${user.username}!", Toast.LENGTH_SHORT).show()
-                                                    onLoginSuccess(user.role)
-                                                },
-                                                onFailure = { err ->
-                                                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
-                                                }
-                                            )
-                                        },
-                                        onError = { err ->
-                                            Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
-                                        }
-                                    )
+                                    // Suppress the auto-prompt for this composition so
+                                    // the cashier can type a different username.
+                                    suppressedBiometric.value = true
+                                    username = ""
+                                    password = ""
+                                    loginError = ""
                                 }
                             )
                         )
