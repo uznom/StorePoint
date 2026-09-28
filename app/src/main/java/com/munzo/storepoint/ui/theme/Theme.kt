@@ -69,15 +69,31 @@ private val LightColorScheme =
 /**
  * Primary theme for StorePoint POS.
  * Full Material 3 Expressive theme (Android 17 / M3E):
- *  - Material You dynamic color on Android 12+, expressive fallback palettes below.
  *  - Physically-based expressive MotionScheme (bouncy springs, M3E duration tokens).
  *  - "Reduce animations" accessibility setting honored: all expressive motion snaps.
+ *
+ * ## Why dynamic color is OFF by default
+ *
+ * [dynamicColor] remains available, but defaults to `false`. With it enabled, Android 12+
+ * (which is every supported device - minSdk is 34) replaces the entire palette with
+ * wallpaper-derived colors, including `primary`, `onPrimaryContainer` and the
+ * `surfaceContainer*` ramp. That has two consequences that matter for a POS terminal:
+ *
+ *  1. **Contrast is no longer verifiable.** The hand-tuned palette below is audited to
+ *     WCAG AA (see `ThemeContrastTest`). A dynamic scheme derives its roles from an
+ *     arbitrary wallpaper hue, so icon-on-surface pairs that pass today can silently
+ *     drop below AA on a device whose wallpaper happens to be mid-tone - which is
+ *     exactly the "icons blend into their background" symptom.
+ *  2. **The terminal stops looking like the POS it is.** A sari-sari register should
+ *     look the same on every device in the chain, and staff should not have to learn
+ *     that swapping the wallpaper changes button contrast.
+ *
+ * Set `dynamicColor = true` at the call site if brand personalization is ever wanted.
  */
 @Composable
 fun StorePointTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color enabled by default for Android 12+ / Android 17 Material 3 Expressive
-  dynamicColor: Boolean = true,
+  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val context = LocalContext.current
