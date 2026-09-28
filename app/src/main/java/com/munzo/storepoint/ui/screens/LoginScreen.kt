@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.PersonOutline
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,6 +54,7 @@ import com.munzo.storepoint.ui.components.ExpressiveButtonVariant
 fun LoginScreen(
     viewModel: StorePointViewModel,
     onAboutNavigate: () -> Unit,
+    onPinResetNavigate: () -> Unit,
     onLoginSuccess: (String) -> Unit // returns role: "ADMIN" or "CASHIER"
 ) {
     val context = LocalContext.current
@@ -423,6 +425,40 @@ fun LoginScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        // Migration prompt: shown only when the typed account still
+                        // holds a legacy credential. Discoverable rather than a dead
+                        // end, so an upgrading user is never locked out.
+                        if (pendingResetUsers.any { it.username.equals(username.trim(), ignoreCase = true) }) {
+                            Surface(
+                                shape = ExpressiveCardShape,
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("pin_reset_banner")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        "This account still uses an old 6-digit PIN.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                    ExpressiveButton(
+                                        onClick = onPinResetNavigate,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("pin_reset_start_button"),
+                                        label = "Set up my new 4-digit PIN",
+                                        icon = Icons.Default.LockReset,
+                                        variant = ExpressiveButtonVariant.TONAL,
+                                        size = ExpressiveButtonSize.M
+                                    )
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = username,
                             onValueChange = { username = it },

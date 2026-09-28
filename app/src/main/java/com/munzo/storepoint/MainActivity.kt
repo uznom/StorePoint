@@ -294,11 +294,26 @@ class MainActivity : FragmentActivity() {
                                     onAboutNavigate = {
                                         navController.navigate("about")
                                     },
+                                    onPinResetNavigate = {
+                                        navController.navigate("pin_reset")
+                                    },
                                     onLoginSuccess = { role ->
                                         val dest = if (role == "INVENTORY") "inventory_portal" else "cashier_pos"
                                         navController.navigate(dest) {
                                             popUpTo("login") { inclusive = true }
                                         }
+                                    }
+                                )
+                            }
+
+                            // One-time 4-digit PIN migration. Reachable only for
+                            // accounts flagged `pinResetRequired`, and only after the
+                            // user proves ownership with their existing credential.
+                            composable("pin_reset") {
+                                com.munzo.storepoint.ui.screens.PinResetScreen(
+                                    viewModel = viewModel,
+                                    onCompleted = {
+                                        navController.popBackStack()
                                     }
                                 )
                             }
