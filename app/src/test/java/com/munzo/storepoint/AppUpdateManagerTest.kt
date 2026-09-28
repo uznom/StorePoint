@@ -52,7 +52,18 @@ class AppUpdateManagerTest {
     }
 
     @Test
-    fun appVersion_isOnePointZeroPointOne() {
-        org.junit.Assert.assertEquals("1.0.1", com.munzo.storepoint.util.APP_VERSION)
+    fun appVersion_matchesCurrentReleaseTag() {
+        // Guards the in-app updater: `isVersionNewer()` compares the newest GitHub
+        // release tag against BuildConfig.VERSION_NAME. If versionName drifts below the
+        // shipped tag, a terminal that already installed the latest APK is prompted to
+        // update forever. Bump this in lockstep with app/build.gradle.kts and the tag.
+        org.junit.Assert.assertEquals("1.0.1.3", com.munzo.storepoint.util.APP_VERSION)
+    }
+
+    @Test
+    fun appVersion_isNotNewerThanItsOwnTag() {
+        // A device already running this build must not be told an update is available.
+        val current = com.munzo.storepoint.util.APP_VERSION
+        assertFalse(AppUpdateManager.isVersionNewer("v$current", current))
     }
 }
