@@ -58,6 +58,7 @@ import com.munzo.storepoint.ui.theme.LoadColor
 import com.munzo.storepoint.ui.components.ExpressiveButton
 import com.munzo.storepoint.ui.components.ExpressiveButtonSize
 import com.munzo.storepoint.ui.components.ExpressiveButtonVariant
+import com.munzo.storepoint.ui.layout.ScanSearchField
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.window.Dialog
@@ -950,11 +951,16 @@ fun CashierPOSScreen(
                                     )
                                 }
                             } else {
-                            // Google M3 Expressive Pill Search Bar with integrated Scan button
+                            // Google M3 Expressive Pill Search Bar with integrated Scan button.
+                            // The label/placeholder resolve from the width this field actually
+                            // gets, so a narrow phone or split-screen window degrades the copy
+                            // instead of ellipsing it. See ScanSearchField.
+                            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                val searchCopy = ScanSearchField.copyFor(maxWidth)
                             TextField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                placeholder = { Text("Search product name, ID...", style = MaterialTheme.typography.bodyMedium) },
+                                placeholder = { Text(searchCopy.placeholder, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Search,
@@ -1003,6 +1009,7 @@ fun CashierPOSScreen(
                                     .testTag("catalog_search_bar"),
                                 singleLine = true
                             )
+                            } // end BoxWithConstraints for adaptive search copy
 
 
 
@@ -1392,14 +1399,19 @@ fun CashierPOSScreen(
                                             }.take(5)
                                         }
 
+                                        // This field shares the row with the fixed-width Qty field,
+                                        // so the sibling space is reserved when resolving the copy.
+                                        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                        val searchCopy = ScanSearchField.copyFor(maxWidth, hasSiblingField = true)
+
                                         OutlinedTextField(
                                             value = manualBarcodeInput,
                                             onValueChange = { 
                                                 manualBarcodeInput = it 
                                                 isDropdownExpanded = true
                                             },
-                                            label = { Text("Scan/Search Item") },
-                                            placeholder = { Text("Barcode or name") },
+                                            label = { Text(searchCopy.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                            placeholder = { Text(searchCopy.placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                             trailingIcon = {
                                                 IconButton(onClick = { viewModel.isScannerOpen.value = true }) {
                                                     Icon(Icons.Default.QrCodeScanner, "Launch camera")
@@ -1416,6 +1428,7 @@ fun CashierPOSScreen(
                                                 }
                                             })
                                         )
+                                        } // end BoxWithConstraints for adaptive search copy
 
                                         if (isDropdownExpanded && matchedSuggestions.isNotEmpty()) {
                                             DropdownMenu(

@@ -33,6 +33,7 @@ import com.munzo.storepoint.ui.components.ExpressiveButtonSize
 import com.munzo.storepoint.ui.components.ExpressiveButtonVariant
 import com.munzo.storepoint.ui.components.ExpressiveWidthClass
 import com.munzo.storepoint.ui.components.rememberExpressiveWidthClass
+import com.munzo.storepoint.ui.layout.ScanSearchField
 import com.munzo.storepoint.ui.theme.*
 import java.util.Locale
 
@@ -293,17 +294,20 @@ private fun InventoryPriceCheckerTab(
     }
 
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // Search & Scanner Bar
+        // Search & Scanner Bar. The copy degrades with the width actually available to
+        // the field, so a narrow window does not ellipsize a long fixed label.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val searchCopy = ScanSearchField.copyFor(maxWidth)
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Search by Name or Barcode") },
-                placeholder = { Text("Scan or enter SKU to check price...") },
+                label = { Text(searchCopy.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                placeholder = { Text(searchCopy.placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -313,11 +317,12 @@ private fun InventoryPriceCheckerTab(
                     }
                 },
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .testTag("price_check_search_field"),
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp)
             )
+            }
 
             FilledIconButton(
                 onClick = { showScanner = true },
@@ -573,18 +578,21 @@ private fun InventoryStocktakeAuditTab(
             )
         }
 
-        // Action Toolbar
+        // Action Toolbar. The audit field shares this row with a fixed-width button, so
+        // the sibling space is reserved when resolving the search copy.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val searchCopy = ScanSearchField.copyFor(maxWidth, hasSiblingField = true)
             OutlinedTextField(
                 value = auditQuery,
                 onValueChange = { auditQuery = it },
-                label = { Text("Audit Item / SKU Barcode") },
-                placeholder = { Text("Scan or type item...") },
-                modifier = Modifier.weight(1f).testTag("audit_input_field"),
+                label = { Text(searchCopy.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                placeholder = { Text(searchCopy.placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                modifier = Modifier.fillMaxWidth().testTag("audit_input_field"),
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 trailingIcon = {
@@ -593,6 +601,7 @@ private fun InventoryStocktakeAuditTab(
                     }
                 }
             )
+            }
 
             Button(
                 onClick = {

@@ -12,6 +12,7 @@ import com.munzo.storepoint.util.BiometricAuthHelper
 import com.munzo.storepoint.util.CrashDiagnosticsManager
 import com.munzo.storepoint.util.DatabaseBackupManager
 import com.munzo.storepoint.util.EscPosHelper
+import com.munzo.storepoint.util.KioskLockout
 import com.munzo.storepoint.util.SecurityHelper
 import com.munzo.storepoint.util.SessionStateCache
 import com.munzo.storepoint.util.UpdateDownloadState
@@ -128,11 +129,54 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         kioskPin.value = hashedPin
     }
 
+    /**
+     * Escalating failure counter for the kiosk PIN itself.
+     *
+     * SECURITY (issue #3): the Admin Security dialog used to call [isKioskPinValid]
+     * directly on every button press, with no fail counter at all, against a PIN
+     * whose keyspace is only 10,000. Every other privileged path in the app
+     * ([verifyAdminPin], [verifyKioskUnlock], `login`) was already throttled; this
+     * was the single exception, and it guarded the register.
+     */
+    private val kioskPinLockout = KioskLockout(
+        readFailCount = { prefs.getInt(KIOSK_PIN_FAIL_COUNT, 0) },
+        readLockedUntil = { prefs.getLong(KIOSK_PIN_LOCKED_UNTIL, 0L) },
+        writeState = { _, fails, lockedUntil ->
+            prefs.edit().putInt(KIOSK_PIN_FAIL_COUNT, fails)
+                .putLong(KIOSK_PIN_LOCKED_UNTIL, lockedUntil).apply()
+        }
+    )
+
+    /**
+     * Verifies the kiosk PIN under an escalating lockout.
+     *
+     * This is the **only** supported way to release lockdown with the kiosk PIN.
+     * [isKioskPinValid] remains a pure, side-effect-free comparison for callers
+     * that only need to know whether a PIN is configured.
+     */
+    fun verifyKioskPinUnlock(pin: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+        val active = kioskPinLockout.lockoutMessage(KIOSK_PIN_LOCKOUT_KEY)
+        if (active != null) {
+            onFailure(active)
+            return
+        }
+
+        if (isKioskPinValid(pin)) {
+            kioskPinLockout.onSuccess(KIOSK_PIN_LOCKOUT_KEY)
+            onSuccess()
+        } else {
+            onFailure(kioskPinLockout.onFailure(KIOSK_PIN_LOCKOUT_KEY))
+        }
+    }
+
     /** Verifies a candidate kiosk PIN against the stored PBKDF2 hash (constant-time). */
     fun isKioskPinValid(candidate: String): Boolean {
         val storedHash = kioskPin.value ?: ""
         return storedHash.isNotEmpty() && SecurityHelper.verifyPassword(candidate, storedHash).isMatch
     }
+
+    /** True when a kiosk PIN has been configured on this terminal. */
+    fun hasKioskPin(): Boolean = !kioskPin.value.isNullOrEmpty()
 
     internal var toneGenerator: android.media.ToneGenerator? = null
 
@@ -433,9 +477,21 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     // --- Authentication ---
     val isKioskModeActive = MutableStateFlow(prefs.getBoolean("is_kiosk_mode_active", false))
 
+    private companion object {
+        /** Lockout bucket for the kiosk PIN, kept separate from admin-PIN throttles. */
+        const val KIOSK_PIN_LOCKOUT_KEY = "kiosk_pin"
+        const val KIOSK_PIN_FAIL_COUNT = "kiosk_pin_fail_count"
+        const val KIOSK_PIN_LOCKED_UNTIL = "kiosk_pin_locked_until"
+    }
+
     fun toggleKioskMode(active: Boolean) {
         prefs.edit().putBoolean("is_kiosk_mode_active", active).apply()
         isKioskModeActive.value = active
+        if (!active) {
+            // Releasing lockdown clears its failure history, so a later re-activation
+            // does not inherit a stale lockout from a previous lockdown cycle.
+            kioskPinLockout.onSuccess(KIOSK_PIN_LOCKOUT_KEY)
+        }
     }
 
     fun loginWithBarcode(barcodeId: String, onSuccess: (User) -> Unit, onFailure: (String) -> Unit) {

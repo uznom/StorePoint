@@ -48,6 +48,13 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 
+/**
+ * Privileged actions that require ADMIN authorization when the kiosk PIN is
+ * unavailable (issue #2). Modelled explicitly so adding a second such action
+ * cannot silently fall through to an unauthenticated release.
+ */
+private enum class KioskPendingAction { RELEASE_LOCKDOWN }
+
 @Composable
 fun SecurityTab(viewModel: StorePointViewModel) {
     val context = LocalContext.current
@@ -90,6 +97,18 @@ fun SecurityTab(viewModel: StorePointViewModel) {
     
     var pinVerifyInput by remember { mutableStateOf("") }
     var pinVerifyError by remember { mutableStateOf("") }
+
+    // SECURITY (issue #2): fail-closed recovery path for a terminal that is in lockdown
+    // with no kiosk PIN configured. Releasing lockdown still requires a verified ADMIN
+    // account PIN through the rate-limited verifyKioskUnlock() path.
+    var showAdminFallbackAuthDialog by remember { mutableStateOf(false) }
+    var pendingKioskAction by remember { mutableStateOf(KioskPendingAction.RELEASE_LOCKDOWN) }
+    var adminAuthError by remember { mutableStateOf("") }
+    var adminAuthPin by remember { mutableStateOf("") }
+
+    // SECURITY (issue #3): disables the Unlock button while a lockout is active so the
+    // dialog cannot be spammed, and mirrors the remaining time to the user.
+    var kioskPinLockoutActive by remember { mutableStateOf(false) }
 
     var showWipeDataDialog by remember { mutableStateOf(false) }
     var adminWipePasswordInput by remember { mutableStateOf("") }
@@ -817,9 +836,19 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                 Button(
                     onClick = {
                         if (isKioskActive) {
-                            // Turn OFF requires verifying the PIN first!
+                            // SECURITY (issue #2): fail closed. This branch used to call
+                            // toggleKioskMode(false) directly when no kiosk PIN was set,
+                            // releasing lockdown with no credential at all — directly
+                            // contradicting the comment above it and the fail-closed
+                            // posture of verifyAdminPin(). If the kiosk PIN is missing we
+                            // now require an ADMIN account PIN via the rate-limited
+                            // verifyKioskUnlock() path, which is also the only recovery
+                            // for a terminal left in lockdown with no PIN configured.
                             if (savedKioskPin.orEmpty().isEmpty()) {
-                                viewModel.toggleKioskMode(false)
+                                adminAuthError = "No Kiosk PIN is configured on this terminal."
+                                adminAuthPin = ""
+                                pendingKioskAction = KioskPendingAction.RELEASE_LOCKDOWN
+                                showAdminFallbackAuthDialog = true
                             } else {
                                 pinVerifyInput = ""
                                 pinVerifyError = ""
@@ -1621,10 +1650,16 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                     Text("Enter the Kiosk secure PIN code to release lockdown:")
                     OutlinedTextField(
                         value = pinVerifyInput,
-                        onValueChange = { pinVerifyInput = it.filter { c -> c.isDigit() } },
+                        onValueChange = {
+                            // SECURITY (issue #3): clear the field after every attempt so a
+                            // wrong PIN is not left on screen for the next guess to read.
+                            pinVerifyInput = it.filter { c -> c.isDigit() }
+                            pinVerifyError = ""
+                        },
                         label = { Text("Enter PIN") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        isError = pinVerifyError.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (pinVerifyError.isNotEmpty()) {
@@ -1634,28 +1669,116 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             },
             confirmButton = {
                 Button(
+                    // SECURITY (issue #3): verification now runs through
+                    // verifyKioskPinUnlock(), which counts failures and imposes an
+                    // escalating lockout. The previous direct isKioskPinValid() call
+                    // had no counter at all, leaving the 10,000-combination keyspace
+                    // brute-forceable.
+                    enabled = pinVerifyInput.isNotEmpty() && !kioskPinLockoutActive,
                     onClick = {
-                        if (viewModel.isKioskPinValid(pinVerifyInput)) {
-                            viewModel.toggleKioskMode(false)
-                            showKioskPinVerifyDialog = false
-                            Toast.makeText(context, "Kiosk Mode released.", Toast.LENGTH_SHORT).show()
-                        } else {
-                            pinVerifyError = "Incorrect Kiosk security PIN."
-                        }
+                        viewModel.verifyKioskPinUnlock(
+                            pin = pinVerifyInput,
+                            onSuccess = {
+                                viewModel.toggleKioskMode(false)
+                                showKioskPinVerifyDialog = false
+                                pinVerifyInput = ""
+                                kioskPinLockoutActive = false
+                                Toast.makeText(context, "Kiosk Mode released.", Toast.LENGTH_SHORT).show()
+                            },
+                            onFailure = { err ->
+                                pinVerifyError = err
+                                pinVerifyInput = ""
+                                kioskPinLockoutActive = err.startsWith("Too many")
+                            }
+                        )
                     }
                 ) {
                     Text("Unlock")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showKioskPinVerifyDialog = false }) {
+                TextButton(onClick = {
+                    showKioskPinVerifyDialog = false
+                    pinVerifyInput = ""
+                    pinVerifyError = ""
+                    kioskPinLockoutActive = false
+                }) {
                     Text("Cancel")
                 }
             }
         )
     }
 
-    // --- SECURE DATA CLEARING PIN VERIFY DIALOG ---
+    // --- FAIL-CLOSED ADMIN FALLBACK: RELEASE LOCKDOWN WITH NO KIOSK PIN SET ---
+    // SECURITY (issue #2): a terminal stuck in lockdown with no kiosk PIN must still
+    // require a verified ADMIN credential. This is also the documented recovery path
+    // for a forgotten kiosk PIN.
+    if (showAdminFallbackAuthDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAdminFallbackAuthDialog = false
+                adminAuthError = ""
+            },
+            title = { Text("Admin Authorization Required", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "No Kiosk security PIN is configured on this terminal, so lockdown " +
+                            "cannot be released without an Admin account PIN."
+                    )
+                    OutlinedTextField(
+                        value = adminAuthPin,
+                        onValueChange = {
+                            adminAuthPin = it.filter { c -> c.isDigit() }
+                            adminAuthError = ""
+                        },
+                        label = { Text("Admin PIN") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        isError = adminAuthError.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (adminAuthError.isNotEmpty()) {
+                        Text(adminAuthError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = adminAuthPin.isNotEmpty(),
+                    onClick = {
+                        viewModel.verifyKioskUnlock(
+                            pin = adminAuthPin,
+                            onSuccess = {
+                                showAdminFallbackAuthDialog = false
+                                adminAuthPin = ""
+                                adminAuthError = ""
+                                if (pendingKioskAction == KioskPendingAction.RELEASE_LOCKDOWN) {
+                                    viewModel.toggleKioskMode(false)
+                                    Toast.makeText(context, "Kiosk Mode released by Admin.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onFailure = { err ->
+                                adminAuthError = err
+                                adminAuthPin = ""
+                            }
+                        )
+                    }
+                ) {
+                    Text("Authorize & Release")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showAdminFallbackAuthDialog = false
+                    adminAuthError = ""
+                    adminAuthPin = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     if (showWipeDataDialog) {
         AlertDialog(
             onDismissRequest = { showWipeDataDialog = false },
