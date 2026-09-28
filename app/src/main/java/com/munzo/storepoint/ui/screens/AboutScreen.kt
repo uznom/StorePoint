@@ -176,7 +176,11 @@ fun AboutScreenContent(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Version $currentVersion • Turbo Edition (Max Uncapped RAM)",
+                    // Removed the "Turbo Edition (Max Uncapped RAM)" suffix. The manifest
+                    // sets android:largeHeap="true", which only *requests* a larger heap
+                    // from Android - the OS still caps the app. Describing it as
+                    // "Max Uncapped RAM" overstated what the build actually does.
+                    text = "Version $currentVersion",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
