@@ -876,34 +876,133 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // --- Owner Wallet Float Management (ledger-backed) ---
+
+    /** True when the signed-in user is an ADMIN, the only role permitted to move float. */
+    private fun isAdminActor(): Boolean =
+        activeUser.value?.role?.equals("ADMIN", ignoreCase = true) == true
+
+    /**
+     * Reloads (tops up) an owner wallet float and writes a RELOAD ledger row.
+     *
+     * ADMIN-only. A cashier topping up their own float is a straightforward shrinkage
+     * vector, so this fails closed when no admin is signed in rather than trusting the
+     * caller to have gated the UI.
+     *
+     * This is the *supported* way to add money to a wallet; [updateGCashBalance] and
+     * friends are retained only for shift-close entry and now record a RECONCILE row.
+     */
+    fun reloadWallet(
+        walletLabel: String,
+        amount: Double,
+        reference: String = "",
+        notes: String = "",
+        onSuccess: (Double) -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            if (!isAdminActor()) {
+                onFailure("Only an Admin can reload a wallet float.")
+                return@launch
+            }
+            if (amount.isNaN() || amount.isInfinite() || amount <= 0.0) {
+                onFailure("Enter an amount greater than zero.")
+                return@launch
+            }
+            val actor = activeUser.value?.username ?: "admin"
+            val newBalance = repository.reloadWallet(
+                walletType = StorePointRepository.canonicalWalletType(walletLabel),
+                amount = amount,
+                actorUsername = actor,
+                reference = reference,
+                notes = notes
+            )
+            if (newBalance == null) {
+                onFailure("Could not reload the wallet. Check the amount and try again.")
+            } else {
+                Toast.makeText(
+                    context,
+                    "${StorePointRepository.canonicalWalletType(walletLabel)} reloaded: ${StorePointRepository.roundMoney(newBalance)}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                onSuccess(newBalance)
+            }
+        }
+    }
+
+    /**
+     * Reconciles a wallet to the figure physically counted at shift close.
+     *
+     * Replaces the previous silent absolute overwrite. The correction is recorded as a
+     * RECONCILE row, so history shows both the system figure and the counted figure.
+     */
+    fun reconcileWalletBalance(
+        walletLabel: String,
+        countedBalance: Double,
+        notes: String = "",
+        onSuccess: (Double) -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            if (countedBalance.isNaN() || countedBalance.isInfinite() || countedBalance < 0.0) {
+                onFailure("Enter a valid counted balance (zero or greater).")
+                return@launch
+            }
+            val actor = activeUser.value?.username ?: "shift-close"
+            val newBalance = repository.reconcileWallet(
+                walletType = StorePointRepository.canonicalWalletType(walletLabel),
+                countedBalance = countedBalance,
+                actorUsername = actor,
+                notes = notes
+            )
+            if (newBalance == null) {
+                onFailure("Could not reconcile the wallet balance.")
+            } else {
+                onSuccess(newBalance)
+            }
+        }
+    }
+
+    /** System-derived wallet balance (sum of all recorded movements), for shift-close comparison. */
+    suspend fun getSystemDerivedWalletBalance(walletLabel: String): Double =
+        repository.getSystemDerivedBalanceSync(StorePointRepository.canonicalWalletType(walletLabel))
+
+    suspend fun getRecentWalletHistory(walletLabel: String, limit: Int = 50): List<WalletLedgerEntry> =
+        repository.getRecentWalletEntriesSync(StorePointRepository.canonicalWalletType(walletLabel), limit)
+
+    /**
+     * Records that a customer load consumed owner float. Invoked from checkout.
+     *
+     * Not admin-gated: this is a consequence of a legitimate sale by whichever cashier
+     * rang it up, and blocking it would desynchronize the ledger from the transaction.
+     */
+    suspend fun recordWalletConsumption(walletLabel: String, amount: Double, reference: String = "") {
+        val actor = activeUser.value?.username ?: "cashier"
+        repository.recordWalletConsumption(
+            walletType = StorePointRepository.canonicalWalletType(walletLabel),
+            amount = amount,
+            actorUsername = actor,
+            reference = reference
+        )
+    }
+
+    /**
+     * @deprecated Silent absolute setter retained for shift-close "actual balance"
+     * entry. Prefer [reconcileWalletBalance], which records why the figure changed.
+     */
+    @Deprecated("Use reloadWallet() to add funds, or reconcileWalletBalance() to correct.")
     fun updateGCashBalance(newBalance: Double) {
-        viewModelScope.launch {
-            val currentConfig = repository.getStoreConfigSync()
-            if (currentConfig != null) {
-                repository.saveStoreConfig(currentConfig.copy(gcashBalance = StorePointRepository.roundMoney(newBalance)))
-                Toast.makeText(context, "GCash balance updated successfully.", Toast.LENGTH_SHORT).show()
-            }
-        }
+        reconcileWalletBalance("GCash", newBalance, notes = "Set via legacy balance editor")
     }
 
+    @Deprecated("Use reloadWallet() to add funds, or reconcileWalletBalance() to correct.")
     fun updateSmartLoadBalance(newBalance: Double) {
-        viewModelScope.launch {
-            val currentConfig = repository.getStoreConfigSync()
-            if (currentConfig != null) {
-                repository.saveStoreConfig(currentConfig.copy(smartLoadBalance = StorePointRepository.roundMoney(newBalance)))
-                Toast.makeText(context, "Smart Load balance updated successfully.", Toast.LENGTH_SHORT).show()
-            }
-        }
+        reconcileWalletBalance("Smart", newBalance, notes = "Set via legacy balance editor")
     }
 
+    @Deprecated("Use reloadWallet() to add funds, or reconcileWalletBalance() to correct.")
     fun updateGlobeLoadBalance(newBalance: Double) {
-        viewModelScope.launch {
-            val currentConfig = repository.getStoreConfigSync()
-            if (currentConfig != null) {
-                repository.saveStoreConfig(currentConfig.copy(globeLoadBalance = StorePointRepository.roundMoney(newBalance)))
-                Toast.makeText(context, "Globe Load balance updated successfully.", Toast.LENGTH_SHORT).show()
-            }
-        }
+        reconcileWalletBalance("Globe", newBalance, notes = "Set via legacy balance editor")
     }
 
     fun updateDigitalServiceFees(

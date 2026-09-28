@@ -10,10 +10,38 @@ import kotlinx.coroutines.withContext
 
 class StorePointRepository(private val db: AppDatabase) {
 
+    /** Canonical wallet identifiers, so the DAO index, the migration seed and the UI
+     *  cannot drift apart on spelling. */
+    object WalletType {
+        const val GCASH = "GCASH"
+        const val SMART = "SMART"
+        const val GLOBE = "GLOBE"
+    }
+
+    object WalletEntryType {
+        const val RELOAD = "RELOAD"
+        const val CONSUMED = "CONSUMED"
+        const val RECONCILE = "RECONCILE"
+        const val OPENING_BALANCE = "OPENING_BALANCE"
+    }
+
     companion object {
         fun roundMoney(amount: Double): Double {
             if (amount.isNaN() || amount.isInfinite()) return 0.0
             return BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP).toDouble()
+        }
+
+        /**
+         * Maps a UI-facing wallet label ("Smart", "TNT", "Globe/TM") to its canonical key.
+         *
+         * The load networks are matched before the generic "TM" catch so a "Globe/TM"
+         * label resolves to GLOBE rather than being swallowed by a looser rule.
+         */
+        fun canonicalWalletType(label: String): String = when {
+            label.contains("gCash", ignoreCase = true) -> WalletType.GCASH
+            label.contains("smart", ignoreCase = true) || label.contains("tnt", ignoreCase = true) -> WalletType.SMART
+            label.contains("globe", ignoreCase = true) || label.contains("tm", ignoreCase = true) -> WalletType.GLOBE
+            else -> WalletType.GCASH
         }
 
         /**
@@ -47,6 +75,7 @@ class StorePointRepository(private val db: AppDatabase) {
     private val transactionDao = db.transactionDao
     private val parkedTransactionDao = db.parkedTransactionDao
     private val drawerTransactionDao = db.drawerTransactionDao
+    private val walletLedgerDao = db.walletLedgerDao
     private val paymentScheduleDao = db.paymentScheduleDao
     private val returnDao = db.returnDao
     private val productVariantDao = db.productVariantDao
@@ -331,6 +360,7 @@ class StorePointRepository(private val db: AppDatabase) {
                     "UPDATE store_config SET gcashBalance = gcashBalance + ? WHERE id = 1",
                     arrayOf<Any?>(gcashDelta)
                 )
+                logWalletConsumptionSync(WalletType.GCASH, gcashDelta, cashierUsername, createdTransactionId)
             }
 
             // Persist Smart Load wallet delta
@@ -339,6 +369,7 @@ class StorePointRepository(private val db: AppDatabase) {
                     "UPDATE store_config SET smartLoadBalance = smartLoadBalance + ? WHERE id = 1",
                     arrayOf<Any?>(smartLoadDelta)
                 )
+                logWalletConsumptionSync(WalletType.SMART, smartLoadDelta, cashierUsername, createdTransactionId)
             }
 
             // Persist Globe Load wallet delta
@@ -347,6 +378,7 @@ class StorePointRepository(private val db: AppDatabase) {
                     "UPDATE store_config SET globeLoadBalance = globeLoadBalance + ? WHERE id = 1",
                     arrayOf<Any?>(globeLoadDelta)
                 )
+                logWalletConsumptionSync(WalletType.GLOBE, globeLoadDelta, cashierUsername, createdTransactionId)
             }
         }
 
@@ -486,6 +518,204 @@ class StorePointRepository(private val db: AppDatabase) {
 
     suspend fun logDrawerTransaction(tx: DrawerTransaction): Long {
         return drawerTransactionDao.insertDrawerTransaction(tx.copy(amount = roundMoney(tx.amount)))
+    }
+
+    // --- Wallet Ledger (owner e-wallet floats) ---
+
+    val allWalletLedger: Flow<List<WalletLedgerEntry>> = walletLedgerDao.getAllWalletLedger()
+
+    fun getRecentWalletEntries(walletType: String, limit: Int = 50): Flow<List<WalletLedgerEntry>> =
+        walletLedgerDao.getRecentForWallet(walletType, limit)
+
+    suspend fun getRecentWalletEntriesSync(walletType: String, limit: Int = 50): List<WalletLedgerEntry> =
+        walletLedgerDao.getRecentForWalletSync(walletType, limit)
+
+    /**
+     * System-derived balance for a wallet: the sum of every recorded movement.
+     *
+     * Shift-close compares the owner's counted figure against this, so a discrepancy
+     * is a genuine signal instead of a self-reported number.
+     */
+    suspend fun getSystemDerivedBalanceSync(walletType: String): Double =
+        roundMoney(walletLedgerDao.getNetDeltaSync(walletType))
+
+    /** Reads the live balance the POS transacts against, for a canonical wallet key. */
+    suspend fun getLiveBalanceSync(walletType: String): Double {
+        val config = getStoreConfigSync() ?: return 0.0
+        return roundMoney(
+            when (walletType) {
+                WalletType.GCASH -> config.gcashBalance
+                WalletType.SMART -> config.smartLoadBalance
+                WalletType.GLOBE -> config.globeLoadBalance
+                else -> 0.0
+            }
+        )
+    }
+
+    /**
+     * Applies a signed movement to a wallet and records it in the ledger atomically.
+     *
+     * The balance update and the ledger row are written in one transaction. If the
+     * ledger insert failed on its own, the balance would move with no explanation -
+     * the exact "untraceable peso" problem this table exists to remove.
+     *
+     * @return the new balance after the movement.
+     */
+    suspend fun applyWalletMovement(
+        walletType: String,
+        type: String,
+        delta: Double,
+        actorUsername: String,
+        reference: String = "",
+        notes: String = ""
+    ): Double {
+        val currentConfig = getStoreConfigSync() ?: return 0.0
+        val current = when (walletType) {
+            WalletType.GCASH -> currentConfig.gcashBalance
+            WalletType.SMART -> currentConfig.smartLoadBalance
+            WalletType.GLOBE -> currentConfig.globeLoadBalance
+            else -> currentConfig.gcashBalance
+        }
+        val next = roundMoney(current + delta)
+
+        val updated = when (walletType) {
+            WalletType.GCASH -> currentConfig.copy(gcashBalance = next)
+            WalletType.SMART -> currentConfig.copy(smartLoadBalance = next)
+            WalletType.GLOBE -> currentConfig.copy(globeLoadBalance = next)
+            else -> currentConfig
+        }
+
+        db.runInTransaction {
+            storeConfigDao.insertStoreConfigBlocking(updated)
+            walletLedgerDao.insertWalletEntryBlocking(
+                WalletLedgerEntry(
+                    walletType = walletType,
+                    timestamp = System.currentTimeMillis(),
+                    actorUsername = actorUsername,
+                    type = type,
+                    delta = roundMoney(delta),
+                    balanceAfter = next,
+                    reference = reference.trim(),
+                    notes = notes.trim()
+                )
+            )
+        }
+        return next
+    }
+
+    /**
+     * Tops up a wallet float - the owner's "reload" action.
+     *
+     * Rejects non-positive and non-finite amounts rather than silently writing a
+     * garbage balance.
+     *
+     * @return the new balance, or `null` if the amount was rejected.
+     */
+    suspend fun reloadWallet(
+        walletType: String,
+        amount: Double,
+        actorUsername: String,
+        reference: String = "",
+        notes: String = ""
+    ): Double? {
+        if (amount.isNaN() || amount.isInfinite() || amount <= 0.0) return null
+        return applyWalletMovement(
+            walletType = walletType,
+            type = WalletEntryType.RELOAD,
+            delta = roundMoney(amount),
+            actorUsername = actorUsername,
+            reference = reference,
+            notes = notes
+        )
+    }
+
+    /**
+     * Records a customer load consuming float, called from checkout.
+     *
+     * [amount] is the peso value of the load the customer purchased. Stored negative:
+     * the owner's float shrinks as customers buy loads.
+     */
+    suspend fun recordWalletConsumption(
+        walletType: String,
+        amount: Double,
+        actorUsername: String,
+        reference: String = ""
+    ): Double = applyWalletMovement(
+        walletType = walletType,
+        type = WalletEntryType.CONSUMED,
+        delta = -roundMoney(kotlin.math.abs(amount)),
+        actorUsername = actorUsername,
+        reference = reference,
+        notes = "Customer load sale"
+    )
+
+    /**
+     * Reconciles a wallet to the figure the owner physically counted at shift close.
+     *
+     * Writes a correction row rather than a silent overwrite, so both the system
+     * figure and the counted figure stay visible in history. A zero-magnitude
+     * reconciliation is a no-op: it would add noise without recording anything.
+     */
+    suspend fun reconcileWallet(
+        walletType: String,
+        countedBalance: Double,
+        actorUsername: String,
+        notes: String = ""
+    ): Double? {
+        if (countedBalance.isNaN() || countedBalance.isInfinite() || countedBalance < 0.0) return null
+        val live = getLiveBalanceSync(walletType)
+        val delta = roundMoney(countedBalance - live)
+        if (delta == 0.0) return live
+        return applyWalletMovement(
+            walletType = walletType,
+            type = WalletEntryType.RECONCILE,
+            delta = delta,
+            actorUsername = actorUsername,
+            notes = notes.ifBlank { "Shift close reconciliation" }
+        )
+    }
+
+    /**
+     * Records a customer load consuming owner float, from inside the checkout
+     * transaction.
+     *
+     * Must stay synchronous: `checkout()` runs in `db.runInTransaction { }`, and
+     * the ledger row has to commit atomically with the balance movement. If it were
+     * written separately, a crash between the two would leave the float debited with
+     * no explanation - the precise failure this ledger exists to prevent.
+     *
+     * [delta] is the signed change already applied to `store_config` (negative when
+     * customers consumed the float).
+     */
+    private fun logWalletConsumptionSync(
+        walletType: String,
+        delta: Double,
+        cashierUsername: String,
+        transactionId: Int
+    ) {
+        val balanceColumn = when (walletType) {
+            WalletType.GCASH -> "gcashBalance"
+            WalletType.SMART -> "smartLoadBalance"
+            WalletType.GLOBE -> "globeLoadBalance"
+            else -> return
+        }
+        val balanceAfter = db.openHelper.readableDatabase.query(
+            "SELECT $balanceColumn FROM store_config WHERE id = 1"
+        ).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getDouble(0) else 0.0
+        }
+        walletLedgerDao.insertWalletEntryBlocking(
+            WalletLedgerEntry(
+                walletType = walletType,
+                timestamp = System.currentTimeMillis(),
+                actorUsername = cashierUsername,
+                type = WalletEntryType.CONSUMED,
+                delta = roundMoney(delta),
+                balanceAfter = roundMoney(balanceAfter),
+                reference = "TX-$transactionId",
+                notes = "Customer load sale"
+            )
+        )
     }
 
     // --- Parked / Held Transactions ---

@@ -87,6 +87,10 @@ fun SecurityTab(viewModel: StorePointViewModel) {
     val isKioskActive by viewModel.isKioskModeActive.collectAsState()
     val isAlwaysOn by viewModel.isAlwaysOnEnabled.collectAsState()
     val savedKioskPin by viewModel.kioskPin.collectAsState()
+    // Needed by WalletReloadCard: only an ADMIN may move owner float, and the card
+    // renders the store's currency symbol on amounts.
+    val activeUser by viewModel.activeUser.collectAsState()
+    val storeConfig by viewModel.storeConfig.collectAsState()
 
     // Dialog state controllers
     var showKioskPinSetupDialog by remember { mutableStateOf(false) }
@@ -750,6 +754,15 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                 )
             }
         }
+
+        // --- OWNER WALLET FLOAT RELOAD ---
+        // Admin-only, and recorded in the wallet_ledger table so every peso in/out of
+        // the owner's GCash / Smart / Globe floats is explainable. See WalletReloadCard.
+        WalletReloadCard(
+            viewModel = viewModel,
+            isAdmin = activeUser?.role?.equals("ADMIN", ignoreCase = true) == true,
+            curr = storeConfig?.currencySymbol ?: "P"
+        )
 
         // --- LAUNCHER KIOSK LOCKDOWN CONTROL ---
         Card(

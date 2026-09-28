@@ -25,9 +25,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ProductVariant::class,
         Supplier::class,
         PurchaseOrder::class,
-        PurchaseOrderItem::class
+        PurchaseOrderItem::class,
+        WalletLedgerEntry::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +45,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val productVariantDao: ProductVariantDao
     abstract val supplierDao: SupplierDao
     abstract val purchaseOrderDao: PurchaseOrderDao
+    abstract val walletLedgerDao: WalletLedgerDao
 
     companion object {
         @Volatile
@@ -558,6 +560,58 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds the auditable wallet ledger.
+         *
+         * Purely additive and fail-closed, matching MIGRATION_14_15: no blanket
+         * try/catch, so a genuine failure aborts and rolls back rather than
+         * committing a half-created schema (audit M4).
+         *
+         * **Seeding matters.** Upgrading terminals already have live balances in
+         * `store_config` (the owner has been running the float all along). Creating an
+         * empty ledger would make the system-derived balance read ₱0.00 and report a
+         * phantom ₱X discrepancy at the next shift close. So each wallet with a
+         * non-zero balance gets a single `OPENING_BALANCE` entry carrying that figure,
+         * making `SUM(delta)` equal the pre-upgrade balance exactly.
+         */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `wallet_ledger` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `walletType` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `actorUsername` TEXT NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `delta` REAL NOT NULL,
+                        `balanceAfter` REAL NOT NULL,
+                        `reference` TEXT NOT NULL,
+                        `notes` TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_wallet_ledger_walletType` ON `wallet_ledger` (`walletType`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_wallet_ledger_timestamp` ON `wallet_ledger` (`timestamp`)")
+
+                // Seed one opening row per non-zero wallet so the ledger's running
+                // total reconciles with the balance the terminal already had.
+                db.execSQL("""
+                    INSERT INTO `wallet_ledger` (`walletType`, `timestamp`, `actorUsername`, `type`, `delta`, `balanceAfter`, `reference`, `notes`)
+                    SELECT 'GCASH', 0, 'system', 'OPENING_BALANCE', `gcashBalance`, `gcashBalance`, '', 'Carried over from pre-ledger balance on upgrade to v16'
+                    FROM `store_config` WHERE `id` = 1 AND `gcashBalance` != 0.0
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO `wallet_ledger` (`walletType`, `timestamp`, `actorUsername`, `type`, `delta`, `balanceAfter`, `reference`, `notes`)
+                    SELECT 'SMART', 0, 'system', 'OPENING_BALANCE', `smartLoadBalance`, `smartLoadBalance`, '', 'Carried over from pre-ledger balance on upgrade to v16'
+                    FROM `store_config` WHERE `id` = 1 AND `smartLoadBalance` != 0.0
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO `wallet_ledger` (`walletType`, `timestamp`, `actorUsername`, `type`, `delta`, `balanceAfter`, `reference`, `notes`)
+                    SELECT 'GLOBE', 0, 'system', 'OPENING_BALANCE', `globeLoadBalance`, `globeLoadBalance`, '', 'Carried over from pre-ledger balance on upgrade to v16'
+                    FROM `store_config` WHERE `id` = 1 AND `globeLoadBalance` != 0.0
+                """.trimIndent())
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -579,7 +633,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_11_12,
                     MIGRATION_12_13,
                     MIGRATION_13_14,
-                    MIGRATION_14_15
+                    MIGRATION_14_15,
+                    MIGRATION_15_16
                 )
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                                  // Room 2.7 deprecates the no-arg overload; the boolean overload's

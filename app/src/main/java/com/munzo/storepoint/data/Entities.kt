@@ -152,6 +152,54 @@ data class DrawerTransaction(
     val reason: String
 )
 
+/**
+ * Auditable ledger for the store owner's e-wallet floats (GCash, Smart/TNT, Globe/TM).
+ *
+ * The balances in [StoreConfig] are the *live* figure the POS transacts against, but
+ * they were previously only ever changed by a raw absolute setter
+ * (`updateSmartLoadBalance(newBalance)`). That made two things impossible:
+ *
+ *  1. **Explaining a balance.** Every peso removed by a customer load was
+ *     indistinguishable from a mistyped adjustment, because nothing recorded the
+ *     "why". At day-end there was no way to prove the wallet matched physical money.
+ *  2. **Recovering from a mistake.** A wrong keystroke silently overwrote the float
+ *     with no trace.
+ *
+ * Every mutation is now recorded here, so the balance is always reconstructible as
+ * `sum(reloads) - sum(consumed)` and shift-close can compare the owner's counted
+ * figure against the system-derived one.
+ *
+ * [type] values:
+ *  - `RELOAD`  - owner funds the wallet (delta > 0)
+ *  - `CONSUMED`- customer purchased a load, float decreased (delta < 0)
+ *  - `RECONCILE` - owner counted a different figure at close; [delta] is the
+ *                  correction, and [balanceAfter] records the reconciled figure
+ */
+@Entity(
+    tableName = "wallet_ledger",
+    indices = [
+        Index(value = ["walletType"]),
+        Index(value = ["timestamp"])
+    ]
+)
+data class WalletLedgerEntry(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    /** "GCASH" | "SMART" | "GLOBE" - the wallet this movement belongs to. */
+    val walletType: String,
+    val timestamp: Long,
+    /** Who performed the action. Reloads are admin-only, so this is the owner/supervisor. */
+    val actorUsername: String,
+    val type: String, // "RELOAD" | "CONSUMED" | "RECONCILE"
+    /** Signed change to the balance. Positive adds funds, negative consumes them. */
+    val delta: Double,
+    /** The wallet balance immediately after this movement was applied. */
+    val balanceAfter: Double,
+    /** Optional external reference (GCash ref no., receipt number). */
+    val reference: String = "",
+    /** Free-text note, or the reason for a RECONCILE correction. */
+    val notes: String = ""
+)
+
 data class CartItemDetails(
     val product: Product,
     val quantity: Int,

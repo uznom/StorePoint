@@ -14,6 +14,14 @@ interface StoreConfigDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStoreConfig(config: StoreConfig)
+
+    /**
+     * Non-suspend variant for use inside `db.runInTransaction { }`, where the
+     * synchronous transaction lambda cannot await a suspending DAO call. The caller
+     * is already off the main thread.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertStoreConfigBlocking(config: StoreConfig)
 }
 
 @Dao
@@ -205,6 +213,42 @@ interface DrawerTransactionDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDrawerTransaction(tx: DrawerTransaction): Long
+}
+
+@Dao
+interface WalletLedgerDao {
+    @Query("SELECT * FROM wallet_ledger ORDER BY timestamp DESC")
+    fun getAllWalletLedger(): Flow<List<WalletLedgerEntry>>
+
+    @Query("SELECT * FROM wallet_ledger WHERE walletType = :walletType ORDER BY timestamp DESC LIMIT :limit")
+    fun getRecentForWallet(walletType: String, limit: Int = 50): Flow<List<WalletLedgerEntry>>
+
+    @Query("SELECT * FROM wallet_ledger WHERE walletType = :walletType ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentForWalletSync(walletType: String, limit: Int = 50): List<WalletLedgerEntry>
+
+    @Query("SELECT * FROM wallet_ledger WHERE timestamp BETWEEN :from AND :to ORDER BY timestamp DESC")
+    suspend fun getEntriesBetweenSync(from: Long, to: Long): List<WalletLedgerEntry>
+
+    /**
+     * System-derived balance: the sum of every recorded movement for a wallet.
+     * This is what shift-close compares the owner's counted figure against, so a
+     * discrepancy is a real signal rather than a self-reported number.
+     */
+    @Query("SELECT COALESCE(SUM(delta), 0.0) FROM wallet_ledger WHERE walletType = :walletType")
+    suspend fun getNetDeltaSync(walletType: String): Double
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWalletEntry(entry: WalletLedgerEntry): Long
+
+    /**
+     * Non-suspend variant used inside `db.runInTransaction { }`.
+     *
+     * Room's suspending @Insert cannot be called from the synchronous transaction
+     * lambda, and blocking here is correct: the caller is already on a background
+     * dispatcher inside the transaction.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertWalletEntryBlocking(entry: WalletLedgerEntry): Long
 }
 
 @Dao
