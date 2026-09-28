@@ -33,7 +33,9 @@ fun ShimmerProductCard() {
     // does not jump when the real products replace the placeholders.
     Card(
         modifier = Modifier.fillMaxWidth().height(132.dp),
-        shape = com.munzo.storepoint.ui.theme.AsymmetricCardShape(16.dp, 16.dp),
+        // Must match the real catalog card's shape exactly, or tiles visibly change
+        // corners as the skeleton is replaced by real products.
+        shape = com.munzo.storepoint.ui.theme.ExpressiveSmallCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),

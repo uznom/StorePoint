@@ -12,7 +12,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.CornerRounding
@@ -39,32 +38,6 @@ val ExpressiveAsymmetricShape = RoundedCornerShape(
 val ExpressiveButtonShape = RoundedCornerShape(20.dp)
 val ExpressiveCardShape = RoundedCornerShape(28.dp)
 
-/** Asymmetric "GridTile" corner shape: rounded top-left + bottom-right, sharp top-right + bottom-left. Catalog GridTile signature. */
-data class AsymmetricCardShape(
-    val topLeft: Dp = 16.dp,
-    val bottomRight: Dp = 16.dp,
-) : androidx.compose.ui.graphics.Shape {
-    override fun createOutline(
-        size: androidx.compose.ui.geometry.Size,
-        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
-        density: androidx.compose.ui.unit.Density,
-    ): androidx.compose.ui.graphics.Outline {
-        val path = androidx.compose.ui.graphics.Path().apply {
-            val w = size.width
-            val h = size.height
-            val tl = with(density) { topLeft.toPx() }
-            val br = with(density) { bottomRight.toPx() }
-            moveTo(tl, 0f)
-            lineTo(w, 0f)
-            lineTo(w, h - br)
-            quadraticBezierTo(w, h, w - br, h)
-            lineTo(tl, h)
-            quadraticBezierTo(0f, h, 0f, h - tl)
-            close()
-        }
-        return androidx.compose.ui.graphics.Outline.Generic(path)
-    }
-}
 val ExpressiveSheetShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
 val ExpressiveSmallCardShape = RoundedCornerShape(14.dp)
 val ExpressiveLargeCardShape = RoundedCornerShape(32.dp)

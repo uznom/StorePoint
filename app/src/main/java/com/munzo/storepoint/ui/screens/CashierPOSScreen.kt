@@ -45,8 +45,8 @@ import androidx.compose.foundation.rememberScrollState
 import com.munzo.storepoint.ui.theme.ExpressiveButtonShape
 import com.munzo.storepoint.ui.theme.ExpressiveSectionHeader
 import com.munzo.storepoint.ui.components.staggeredEnter
-import com.munzo.storepoint.ui.theme.AsymmetricCardShape
 import com.munzo.storepoint.ui.theme.ExpressiveChipShape
+import com.munzo.storepoint.ui.theme.ExpressiveSmallCardShape
 import com.munzo.storepoint.ui.theme.expressiveGlassCard
 import com.munzo.storepoint.ui.theme.ExpressiveSplitButton
 import com.munzo.storepoint.ui.theme.ExpressiveButtonGroup
@@ -1194,7 +1194,12 @@ fun CashierPOSScreen(
                                                 }
                                                 .staggeredEnter((item.id and 0x3F) % 8)
                                                 .testTag("product_card_${item.id}"),
-                                            shape = AsymmetricCardShape(16.dp, 16.dp),
+                                            // Fully rounded on all four corners. This was
+                                            // AsymmetricCardShape, which only rounds top-left
+                                            // and bottom-right and draws straight edges for
+                                            // the other two - so every catalog tile had two
+                                            // hard 90-degree corners.
+                                            shape = ExpressiveSmallCardShape,
                                             colors = CardDefaults.cardColors(
                                                 containerColor = if (isOutOfStock) {
                                                     MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.4f)
