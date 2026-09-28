@@ -33,6 +33,18 @@ interface UserDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: User)
 
+    @Query("UPDATE user_accounts SET biometricEnrolled = :enrolled WHERE username = :username")
+    suspend fun setBiometricEnrolled(username: String, enrolled: Boolean)
+
+    @Query("UPDATE user_accounts SET pinResetRequired = 0, pinHash = :newHash WHERE username = :username")
+    suspend fun updatePinAfterReset(username: String, newHash: String)
+
+    @Query("SELECT * FROM user_accounts WHERE pinResetRequired = 1")
+    fun getUsersPendingPinReset(): Flow<List<User>>
+
+    @Query("SELECT * FROM user_accounts WHERE biometricEnrolled = 1 ORDER BY username ASC")
+    fun getBiometricEnrolledUsers(): Flow<List<User>>
+
     @Query("DELETE FROM user_accounts WHERE username = :username")
     suspend fun deleteUser(username: String)
 }

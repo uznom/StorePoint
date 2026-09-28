@@ -31,7 +31,19 @@ data class User(
     @PrimaryKey val username: String,
     val pinHash: String,
     val role: String, // "ADMIN", "CASHIER", or "INVENTORY"
-    val barcodeId: String = "" // For logging in, exiting Kiosk, or starting sessions via barcode scanning
+    val barcodeId: String = "", // For logging in, exiting Kiosk, or starting sessions via barcode scanning
+    /**
+     * True once this user has bound a device biometric (fingerprint/face) to their
+     * account. Fingerprint sign-in resolves to exactly one enrolled user and never
+     * falls back to "any non-admin account".
+     */
+    val biometricEnrolled: Boolean = false,
+    /**
+     * True when this account still holds a pre-migration 6-digit credential and must
+     * choose a 4-digit PIN before it can be used for a normal sign-in. The flag is
+     * set during the 13->14 migration and cleared once the user resets.
+     */
+    val pinResetRequired: Boolean = false
 ) {
     val passwordHash: String get() = pinHash
 }

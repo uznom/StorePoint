@@ -27,7 +27,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PurchaseOrder::class,
         PurchaseOrderItem::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -497,6 +497,34 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds biometric enrollment + forced 4-digit PIN reset state to `user_accounts`.
+         *
+         * Every pre-existing row is marked `pinResetRequired = 1` because all stored
+         * credentials at v13 are 6-digit. `biometricEnrolled` defaults to 0 so nobody
+         * is implicitly trusted until they actually bind a fingerprint.
+         *
+         * Non-destructive: uses ALTER TABLE with columnExists guards (the established
+         * fail-closed pattern here) so an interrupted run can be re-applied safely.
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.tableExists("user_accounts")) {
+                    error("MIGRATION_13_14: user_accounts table missing; cannot migrate 13 -> 14")
+                }
+                if (!db.columnExists("user_accounts", "biometricEnrolled")) {
+                    db.execSQL(
+                        "ALTER TABLE user_accounts ADD COLUMN biometricEnrolled INTEGER NOT NULL DEFAULT 0"
+                    )
+                }
+                if (!db.columnExists("user_accounts", "pinResetRequired")) {
+                    db.execSQL(
+                        "ALTER TABLE user_accounts ADD COLUMN pinResetRequired INTEGER NOT NULL DEFAULT 1"
+                    )
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -516,7 +544,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_9_10,
                     MIGRATION_10_11,
                     MIGRATION_11_12,
-                    MIGRATION_12_13
+                    MIGRATION_12_13,
+                    MIGRATION_13_14
                 )
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                                  // Room 2.7 deprecates the no-arg overload; the boolean overload's

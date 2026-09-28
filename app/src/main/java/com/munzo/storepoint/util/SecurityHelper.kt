@@ -12,17 +12,64 @@ object SecurityHelper {
     private const val KEY_LENGTH_BITS = 256
     private const val SALT_BYTES_LENGTH = 16
 
+    /** Canonical PIN length for all newly created or reset credentials. */
+    const val PIN_LENGTH = 4
+
+    /**
+     * Legacy PIN length accepted *only* by the one-time credential reset gate so that
+     * existing 6-digit holders can authorize their own migration to [PIN_LENGTH].
+     * It is never accepted for a normal sign-in.
+     */
+    const val LEGACY_PIN_LENGTH = 6
+
     data class VerificationResult(
         val isMatch: Boolean,
         val needsUpgrade: Boolean
     )
 
     /**
-     * Validates whether a candidate PIN conforms to the strict 6-digit numeric standard.
+     * Validates whether a candidate PIN conforms to the strict 4-digit numeric standard.
      */
     fun isValidPin(pin: String): Boolean {
-        return pin.length == 6 && pin.all { it.isDigit() }
+        return pin.length == PIN_LENGTH && pin.all { it.isDigit() }
     }
+
+    /**
+     * Accepts either the current [PIN_LENGTH] or the legacy [LEGACY_PIN_LENGTH] format.
+     * Used exclusively by [verifyPinLenient] on the credential-reset gate.
+     */
+    fun isValidPinLenient(pin: String): Boolean {
+        return (pin.length == PIN_LENGTH || pin.length == LEGACY_PIN_LENGTH) && pin.all { it.isDigit() }
+    }
+
+    /**
+     * Rejects trivially guessable PINs.
+     *
+     * A 4-digit PIN has a 10,000-combination keyspace (vs 1,000,000 for the legacy
+     * 6-digit format), so sequential, repeated, and keyboard-walk patterns are refused
+     * outright at creation time. Existing stored credentials are never re-validated
+     * against this policy — only newly chosen PINs are.
+     */
+    fun isWeakPin(pin: String): Boolean {
+        if (!isValidPin(pin)) return true
+        if (pin.toSet().size == 1) return true // 0000, 1111, ...
+        if (isAscendingRun(pin) || isDescendingRun(pin)) return true // 0123, 1234, 4321
+        if (pin == "1212" || pin == "2121") return true // alternating
+        if (pin == "1000" || pin == "0001" || pin == "1010") return true // trivial variation
+        if (pin == "2580" || pin == "0852") return true // center column walk
+        return false
+    }
+
+    /** Human-readable guidance shown beneath the PIN entry on the reset/setup screens. */
+    fun pinPolicyHint(): String =
+        "Must be exactly $PIN_LENGTH digits. Avoid repeats (0000), runs (1234), " +
+            "and patterns (2580, 1212)."
+
+    private fun isAscendingRun(pin: String): Boolean =
+        pin.zipWithNext().all { (a, b) -> b - a == 1 }
+
+    private fun isDescendingRun(pin: String): Boolean =
+        pin.zipWithNext().all { (a, b) -> a - b == 1 }
 
     /**
      * Generates a salted PBKDF2-HMAC-SHA256 hash for a 6-digit PIN.
@@ -33,6 +80,20 @@ object SecurityHelper {
      * Verifies candidate PIN against stored PBKDF2 hash or legacy hash.
      */
     fun verifyPin(pin: String, storedHash: String): VerificationResult = verifyPassword(pin, storedHash)
+
+    /**
+     * Verifies a PIN that may still be in the legacy 6-digit format.
+     *
+     * This exists for one purpose only: letting a user holding a pre-migration 6-digit
+     * credential authorize their own reset to a 4-digit PIN. It is a thin guard in
+     * front of [verifyPin] and adds no cryptographic surface of its own — the length
+     * check is purely a UX/input-validation affordance, since [verifyPin] matches on
+     * the hash rather than the plaintext length.
+     */
+    fun verifyPinLenient(pin: String, storedHash: String): VerificationResult {
+        if (!isValidPinLenient(pin)) return VerificationResult(isMatch = false, needsUpgrade = false)
+        return verifyPin(pin, storedHash)
+    }
 
     /**
      * Generates a salted PBKDF2-HMAC-SHA256 hash using a cryptographically secure random salt.
