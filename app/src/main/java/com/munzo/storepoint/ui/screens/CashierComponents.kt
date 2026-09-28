@@ -28,29 +28,50 @@ fun ShimmerProductCard() {
         label = "shimmer_alpha"
     )
 
+    // The skeleton mirrors the real catalog card's intrinsic height (chip row +
+    // 2-line title + price row) instead of an arbitrary fixed height, so the grid
+    // does not jump when the real products replace the placeholders.
     Card(
-        modifier = Modifier.fillMaxWidth().height(140.dp),
+        modifier = Modifier.fillMaxWidth().height(132.dp),
+        shape = com.munzo.storepoint.ui.theme.AsymmetricCardShape(16.dp, 16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Simulated Product Image/Icon Box with expressive rounded corners
+            // Category tag + stock pill row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(72.dp)
+                        .height(18.dp)
+                        .background(Color.LightGray.copy(alpha = alpha), RoundedCornerShape(6.dp))
+                )
+                Box(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(18.dp)
+                        .background(Color.LightGray.copy(alpha = alpha), RoundedCornerShape(6.dp))
+                )
+            }
+
+            // Two-line name bar, matching the real card's fixed 2-line title
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
-                    .background(Color.LightGray.copy(alpha = alpha), RoundedCornerShape(8.dp))
+                    .height(14.dp)
+                    .background(Color.LightGray.copy(alpha = alpha), RoundedCornerShape(4.dp))
             )
-
-            // Simulated Name Bar
             Box(
                 modifier = Modifier
-                    .width(100.dp)
+                    .fillMaxWidth(0.7f)
                     .height(14.dp)
                     .background(Color.LightGray.copy(alpha = alpha), RoundedCornerShape(4.dp))
             )

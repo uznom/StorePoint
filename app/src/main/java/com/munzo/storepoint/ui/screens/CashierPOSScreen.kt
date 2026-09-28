@@ -1124,16 +1124,16 @@ fun CashierPOSScreen(
                                     )
                                 }
                             } else if (isProductsLoading) {
+                                // Same cell size and spacing as the real grid below, so the
+                                // skeleton does not reflow when products arrive.
                                 LazyVerticalGrid(
-                                    columns = GridCells.Adaptive(minSize = 130.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    columns = GridCells.Adaptive(minSize = 150.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     items(8) { index ->
-                                        Box(modifier = Modifier.clip(AsymmetricCardShape(14.dp, 14.dp))) {
-                                            ShimmerProductCard()
-                                        }
+                                        ShimmerProductCard()
                                     }
                                 }
                             } else if (filteredProducts.isEmpty()) {
@@ -1231,6 +1231,9 @@ fun CashierPOSScreen(
                                                     Surface(
                                                         shape = ExpressiveChipShape,
                                                         color = MaterialTheme.colorScheme.primaryContainer,
+                                                        // Take only the slack, so a long category name
+                                                        // ellipsizes instead of squeezing the stock pill
+                                                        // (or pushing it off the card edge).
                                                         modifier = Modifier.weight(1f, fill = false)
                                                     ) {
                                                         Text(
@@ -1281,7 +1284,10 @@ fun CashierPOSScreen(
                                                     overflow = TextOverflow.Ellipsis
                                                 )
 
-                                                // Bottom Price and Action Row
+                                                // Bottom Price and Action Row.
+                                                // The price takes the slack so the trailing UOM/launch
+                                                // affordance is never pushed off the card edge by a
+                                                // long value (e.g. a 5-digit price on a narrow tile).
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1291,7 +1297,10 @@ fun CashierPOSScreen(
                                                         text = "$curr${String.format(Locale.getDefault(), "%.2f", item.price)}",
                                                         style = MaterialTheme.typography.titleMedium,
                                                         fontWeight = FontWeight.Black,
-                                                        color = MaterialTheme.colorScheme.primary
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f, fill = false)
                                                     )
 
                                                     if (availableUoms.size > 1) {
