@@ -54,6 +54,7 @@ import com.munzo.storepoint.ui.components.ExpressiveButtonSize
 import com.munzo.storepoint.ui.components.ExpressiveButtonVariant
 import com.munzo.storepoint.ui.theme.ExpressiveCardShape
 import com.munzo.storepoint.ui.theme.ExpressiveOtpPinInput
+import com.munzo.storepoint.ui.theme.PinPadEntry
 import com.munzo.storepoint.ui.theme.shakeOnTrigger
 import com.munzo.storepoint.util.SecurityHelper
 
@@ -422,13 +423,16 @@ private fun VerifyStep(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
-            ExpressiveOtpPinInput(
+            // Keypad, not the IME: this wizard is the only way an admin proves
+            // ownership, and a system keyboard would cover the wizard's instructions.
+            PinPadEntry(
                 pin = currentPin,
                 onPinChange = onPinChange,
                 // The legacy format is 6 digits, so this pad is intentionally wider
                 // than the standard 4-digit pad used elsewhere.
                 pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                 isMasked = true,
+                isEnabled = !isWorking,
                 modifier = Modifier.fillMaxWidth().testTag("pin_reset_current_pin")
             )
         }

@@ -1706,18 +1706,22 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Enter the Kiosk secure PIN code to release lockdown:")
-                    OutlinedTextField(
-                        value = pinVerifyInput,
-                        onValueChange = {
-                            // SECURITY (issue #3): clear the field after every attempt so a
-                            // wrong PIN is not left on screen for the next guess to read.
-                            pinVerifyInput = it.filter { c -> c.isDigit() }
+                    // Keypad, not the IME: this gate must be usable without the system
+                    // keyboard covering the dialog, and it keeps the PIN off a keyboard
+                    // another customer could read over a shoulder.
+                    PinPadEntry(
+                        pin = pinVerifyInput,
+                        onPinChange = { newPin ->
+                            // Clear on every change so a wrong PIN is not left on screen
+                            // for the next guess to read.
+                            pinVerifyInput = newPin.take(SecurityHelper.LEGACY_PIN_LENGTH)
                             pinVerifyError = ""
                         },
-                        label = { Text("Enter PIN") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
+                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
+                        isMasked = true,
                         isError = pinVerifyError.isNotEmpty(),
+                        errorMessage = pinVerifyError.ifEmpty { null },
+                        isEnabled = !kioskPinLockoutActive,
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (pinVerifyError.isNotEmpty()) {
@@ -1784,21 +1788,26 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         "No Kiosk security PIN is configured on this terminal, so lockdown " +
                             "cannot be released without an Admin account PIN."
                     )
-                    OutlinedTextField(
-                        value = adminAuthPin,
-                        onValueChange = {
-                            adminAuthPin = it.filter { c -> c.isDigit() }
-                            adminAuthError = ""
-                        },
-                        label = { Text("Admin PIN") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        isError = adminAuthError.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
                     if (adminAuthError.isNotEmpty()) {
                         Text(adminAuthError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
+                    Spacer(Modifier.height(8.dp))
+                    // Keypad, not the IME: the admin credential is entered here, and a
+                    // system keyboard would both cover the dialog and put the PIN on a
+                    // shared, observable keyboard.
+                    PinPadEntry(
+                        pin = adminAuthPin,
+                        onPinChange = {
+                            adminAuthPin = it
+                            adminAuthError = ""
+                        },
+                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
+                        isMasked = true,
+                        isError = adminAuthError.isNotEmpty(),
+                        errorMessage = adminAuthError.ifEmpty { null },
+                        isEnabled = !adminAuthError.startsWith("Too many"),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
@@ -1845,16 +1854,18 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Warning! This deletes all transaction items, users, and catalog sets. Retriggering the system setup sequence. Enter your Admin 4-Digit PIN to proceed:")
                     Spacer(Modifier.height(4.dp))
-                    ExpressiveOtpPinInput(
+                    // Keypad, not the IME: this authorises a destructive, irreversible
+                    // wipe of all sales and inventory.
+                    PinPadEntry(
                         pin = adminWipePasswordInput,
                         onPinChange = {
                             adminWipePasswordInput = it
                             wipeDataError = ""
                         },
-                        pinLength = 6,
+                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = wipeDataError.isNotEmpty(),
-                        errorMessage = wipeDataError,
+                        errorMessage = wipeDataError.ifEmpty { null },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1862,7 +1873,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    enabled = adminWipePasswordInput.length == 6,
+                    enabled = adminWipePasswordInput.length == SecurityHelper.LEGACY_PIN_LENGTH,
                     onClick = {
                         viewModel.clearAllDatabaseData(
                             adminPass = adminWipePasswordInput,
@@ -1909,16 +1920,18 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(4.dp))
-                    ExpressiveOtpPinInput(
+                    // Keypad, not the IME: this certifies an import that overwrites the
+                    // live catalogue.
+                    PinPadEntry(
                         pin = importInventoryPinInput,
                         onPinChange = {
                             importInventoryPinInput = it
                             importInventoryPinError = ""
                         },
-                        pinLength = 6,
+                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = importInventoryPinError.isNotEmpty(),
-                        errorMessage = importInventoryPinError,
+                        errorMessage = importInventoryPinError.ifEmpty { null },
                         modifier = Modifier.fillMaxWidth().testTag("import_inventory_admin_pin_field")
                     )
                 }

@@ -41,6 +41,7 @@ import com.munzo.storepoint.ui.theme.ExpressiveCardShape
 import com.munzo.storepoint.ui.theme.tactileBounce
 import com.munzo.storepoint.ui.theme.glassPanel
 import com.munzo.storepoint.ui.theme.ExpressiveOtpPinInput
+import com.munzo.storepoint.ui.theme.PinPadEntry
 import com.munzo.storepoint.ui.theme.shakeOnTrigger
 import com.munzo.storepoint.util.SecurityHelper
 import com.munzo.storepoint.ui.components.ExpressiveAction
@@ -111,13 +112,15 @@ fun LoginScreen(
                 ) {
                     Text("Enter the Admin 4-Digit PIN to immediately stop Lock Task Mode and return to normal operation.")
                     Spacer(Modifier.height(4.dp))
-                    ExpressiveOtpPinInput(
+                    // Keypad, not the IME: the dialog is reachable from the status bar
+                    // during lockdown, where a system keyboard would cover the screen.
+                    PinPadEntry(
                         pin = logoUnlockInput,
                         onPinChange = { logoUnlockInput = it },
                         pinLength = 6,
                         isMasked = true,
                         isError = logoUnlockError.isNotEmpty(),
-                        errorMessage = logoUnlockError,
+                        errorMessage = logoUnlockError.ifEmpty { null },
                         modifier = Modifier.fillMaxWidth().testTag("kiosk_unlock_pin_input")
                     )
                 }
@@ -481,16 +484,21 @@ fun LoginScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            ExpressiveOtpPinInput(
+                            // On-screen numeric keypad instead of the system keyboard:
+                            // the IME covered half the register and hid the sign-in
+                            // context, and it is a shoulder-surfing surface for the PIN
+                            // itself on a shared terminal.
+                            PinPadEntry(
                                 pin = password,
                                 onPinChange = { password = it },
-                                // Auto-login the instant the final digit lands — no
+                                // Auto-login the instant the final digit lands - no
                                 // "Sign In" tap required in the common case.
                                 onPinComplete = { completed -> attemptLogin(completed) },
                                 pinLength = SecurityHelper.PIN_LENGTH,
                                 isMasked = true,
                                 isError = loginError.isNotEmpty(),
                                 errorMessage = loginError.ifEmpty { null },
+                                isEnabled = !isAuthenticating,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("password_input")

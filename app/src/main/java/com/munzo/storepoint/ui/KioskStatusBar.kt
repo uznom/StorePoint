@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.munzo.storepoint.ui.theme.ExpressiveOtpPinInput
+import com.munzo.storepoint.ui.theme.PinPadEntry
 import com.munzo.storepoint.ui.theme.tactileBounce
 import kotlinx.coroutines.delay
 
@@ -316,7 +317,9 @@ fun KioskStatusBar(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(4.dp))
-                    ExpressiveOtpPinInput(
+                    // Keypad, not the IME: reachable from the status bar during lockdown,
+                    // where a system keyboard would cover the register.
+                    PinPadEntry(
                         pin = unlockInput,
                         onPinChange = {
                             unlockInput = it
@@ -325,7 +328,7 @@ fun KioskStatusBar(
                         pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = unlockError.isNotEmpty(),
-                        errorMessage = unlockError,
+                        errorMessage = unlockError.ifEmpty { null },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

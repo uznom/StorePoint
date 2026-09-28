@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -59,6 +60,10 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -1194,6 +1199,11 @@ fun ExpressiveMorphingBadge(
  * - Active glowing focus container with animated pulsing cursor.
  * - Masked (expressive dots) or unmasked numeral display with instant feedback.
  * - Hardware keyboard, soft keyboard, backspace, and IME complete integration.
+ *
+ * @param enableSoftKeyboard when false the field becomes read-only and no longer
+ *   summons the IME, so an on-screen [ExpressivePinPad] becomes the sole input. This
+ *   keeps a POS terminal from covering half the screen with a system keyboard on
+ *   every PIN prompt, and removes a shoulder-surfing surface for PINs.
  */
 @Composable
 fun ExpressiveOtpPinInput(
@@ -1204,8 +1214,21 @@ fun ExpressiveOtpPinInput(
     isMasked: Boolean = true,
     isError: Boolean = false,
     errorMessage: String? = null,
-    onPinComplete: ((String) -> Unit)? = null
+    onPinComplete: ((String) -> Unit)? = null,
+    enableSoftKeyboard: Boolean = true
 ) {
+    val focusRequester = remember { FocusRequester() }
+
+    // A transparent wrapper carries the tap-to-focus gesture so the display keeps
+    // focusable behaviour (and the IME) when enabled, and becomes purely decorative
+    // when the on-screen keypad is driving input instead.
+    Box(
+        modifier = if (enableSoftKeyboard) {
+            modifier.clickable { focusRequester.requestFocus() }
+        } else {
+            modifier
+        }
+    ) {
     BasicTextField(
         value = pin,
         onValueChange = { newValue ->
@@ -1216,11 +1239,29 @@ fun ExpressiveOtpPinInput(
             }
         },
         keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.NumberPassword,
+            // When the pad is driving input the field is readOnly, so the IME is never
+            // opened regardless of the declared type. Keeping a real type (rather than
+            // KeyboardType.None, unavailable on this Compose version) also stops any
+            // IME auto-fill from ever seeing this field.
+            keyboardType = if (enableSoftKeyboard) KeyboardType.NumberPassword else KeyboardType.Password,
             imeAction = ImeAction.Done
         ),
+        readOnly = !enableSoftKeyboard,
+        cursorBrush = if (enableSoftKeyboard) {
+            SolidColor(MaterialTheme.colorScheme.primary)
+        } else {
+            SolidColor(Color.Transparent)
+        },
         singleLine = true,
-        modifier = modifier,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (enableSoftKeyboard) {
+                    Modifier.focusRequester(focusRequester)
+                } else {
+                    Modifier
+                }
+            ),
         decorationBox = {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -1326,5 +1367,182 @@ fun ExpressiveOtpPinInput(
             }
         }
     )
+    }
+}
+
+/**
+ * On-screen numeric keypad for PIN entry, replacing the system keyboard.
+ *
+ * Rationale for a POS terminal:
+ *  - The IME covers roughly half a phone/tablet screen, hiding the cart and the
+ *    sign-in context exactly when a cashier needs to see them.
+ *  - A system keyboard on a shared register is a shoulder-surfing surface for the
+ *    PIN itself, and exposes every other account field on the same screen.
+ *  - Barcode-scanner hardware that triggers the IME keeps firing it.
+ *
+ * Layout is a standard 3x4 telephone grid: 1-9, then Clear, 0, Backspace.
+ */
+@Composable
+fun ExpressivePinPad(
+    onDigit: (Char) -> Unit,
+    onBackspace: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+    isEnabled: Boolean = true
+) {
+    val rows = listOf(
+        listOf("1", "2", "3"),
+        listOf("4", "5", "6"),
+        listOf("7", "8", "9")
+    )
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { digit ->
+                    PinPadKey(
+                        modifier = Modifier.weight(1f),
+                        onClick = { onDigit(digit.first()) },
+                        enabled = isEnabled
+                    ) {
+                        Text(
+                            text = digit,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PinPadKey(
+                modifier = Modifier.weight(1f),
+                onClick = onClear,
+                enabled = isEnabled,
+                containerColor = MaterialTheme.colorScheme.errorContainer
+            ) {
+                Text(
+                    text = "Clear",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+
+            PinPadKey(
+                modifier = Modifier.weight(1f),
+                onClick = { onDigit('0') },
+                enabled = isEnabled
+            ) {
+                Text(
+                    text = "0",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            PinPadKey(
+                modifier = Modifier.weight(1f),
+                onClick = onBackspace,
+                enabled = isEnabled
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Backspace,
+                    contentDescription = "Delete last digit",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+/** A single key in [ExpressivePinPad]. */
+@Composable
+private fun PinPadKey(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    content: @Composable () -> Unit
+) {
+    val alpha = if (enabled) 1f else 0.38f
+    Box(
+        modifier = modifier
+            .height(56.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(containerColor.copy(alpha = containerColor.alpha * alpha))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(modifier = Modifier.alpha(alpha)) { content() }
+    }
+}
+
+/**
+ * A complete PIN entry surface: the masked digit display plus an on-screen keypad,
+ * with no system keyboard.
+ *
+ * Use this anywhere a PIN is requested on the POS terminal. The display is rendered by
+ * [ExpressiveOtpPinInput] with `enableSoftKeyboard = false`, so the keypad is the only
+ * way to enter digits.
+ */
+@Composable
+fun PinPadEntry(
+    pin: String,
+    onPinChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    pinLength: Int = 4,
+    isMasked: Boolean = true,
+    isError: Boolean = false,
+    errorMessage: String? = null,
+    onPinComplete: ((String) -> Unit)? = null,
+    isEnabled: Boolean = true
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        ExpressiveOtpPinInput(
+            pin = pin,
+            onPinChange = onPinChange,
+            pinLength = pinLength,
+            isMasked = isMasked,
+            isError = isError,
+            errorMessage = errorMessage,
+            enableSoftKeyboard = false,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        ExpressivePinPad(
+            onDigit = { digit ->
+                if (pin.length < pinLength) {
+                    val next = pin + digit
+                    onPinChange(next)
+                    if (next.length == pinLength) {
+                        onPinComplete?.invoke(next)
+                    }
+                }
+            },
+            onBackspace = {
+                if (pin.isNotEmpty()) onPinChange(pin.dropLast(1))
+            },
+            onClear = { onPinChange("") },
+            isEnabled = isEnabled,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
