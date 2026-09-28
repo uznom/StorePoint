@@ -122,11 +122,40 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         isAlwaysOnEnabled.value = enabled
     }
 
-    fun setKioskPin(newPin: String) {
-        // C1: Store only a salted PBKDF2 hash of the kiosk PIN (never plaintext).
-        val hashedPin = if (newPin.isEmpty()) "" else SecurityHelper.hashPassword(newPin)
+    /**
+     * Sets the kiosk PIN.
+     *
+     * SECURITY (issue #9): this previously accepted 4-8 digits with no policy at all,
+     * so `0000`, `1234` and `1111` were valid kiosk PINs - while every *user* PIN in
+     * the app is required to pass [SecurityHelper.isValidPin] and [SecurityHelper.isWeakPin].
+     * The kiosk PIN is the highest-value credential on the terminal (it is the only
+     * thing standing between an attacker and full kiosk release), so it must not be
+     * the weakest one.
+     *
+     * Enforced here rather than in the dialog so it cannot be bypassed by a future
+     * caller, and so the same policy holds for every write path.
+     *
+     * @return null on success, or a user-facing reason the PIN was rejected.
+     */
+    fun setKioskPin(newPin: String, onResult: ((String?) -> Unit)? = null): String? {
+        // Fails closed: a blank/short PIN must never silently store an empty hash,
+        // which would leave lockdown releasable with no credential (see issue #2).
+        if (!SecurityHelper.isValidPin(newPin)) {
+            val reason = "Kiosk PIN must be exactly ${SecurityHelper.PIN_LENGTH} digits."
+            onResult?.invoke(reason)
+            return reason
+        }
+        if (SecurityHelper.isWeakPin(newPin)) {
+            val reason = "That Kiosk PIN is too easy to guess. ${SecurityHelper.pinPolicyHint()}"
+            onResult?.invoke(reason)
+            return reason
+        }
+        // C1: Store only a salted PBKDF2 hash (never plaintext).
+        val hashedPin = SecurityHelper.hashPin(newPin)
         prefs.edit().putString("system_kiosk_pin", hashedPin).apply()
         kioskPin.value = hashedPin
+        onResult?.invoke(null)
+        return null
     }
 
     /**
@@ -144,6 +173,24 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         writeState = { _, fails, lockedUntil ->
             prefs.edit().putInt(KIOSK_PIN_FAIL_COUNT, fails)
                 .putLong(KIOSK_PIN_LOCKED_UNTIL, lockedUntil).apply()
+        }
+    )
+
+    /**
+     * Escalating failure counter for the admin-PIN budget, keyed per action.
+     *
+     * SECURITY (issue #6): shares [KioskLockdownPolicy] with the kiosk PIN so every
+     * privileged gate in the app escalates identically, while keeping a separate
+     * counter per action so one cannot exhaust another's allowance.
+     */
+    private val adminUnlockLockout = KioskLockout(
+        readFailCount = { key -> prefs.getInt("${key}_fail_count", 0) },
+        readLockedUntil = { key -> prefs.getLong("${key}_locked_until", 0L) },
+        writeState = { key, fails, lockedUntil ->
+            prefs.edit()
+                .putInt("${key}_fail_count", fails)
+                .putLong("${key}_locked_until", lockedUntil)
+                .apply()
         }
     )
 
@@ -482,7 +529,25 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         const val KIOSK_PIN_LOCKOUT_KEY = "kiosk_pin"
         const val KIOSK_PIN_FAIL_COUNT = "kiosk_pin_fail_count"
         const val KIOSK_PIN_LOCKED_UNTIL = "kiosk_pin_locked_until"
+
+        /**
+         * SECURITY (issue #6): the admin-PIN budget is now keyed per action.
+         *
+         * Previously releasing a cash register out of lockdown and toggling the Wi-Fi
+         * radio shared one counter, so unrelated mistakes consumed the admin's ability
+         * to unlock the terminal.
+         */
+        const val KIOSK_UNLOCK_LOCKOUT_KEY = "admin_kiosk_unlock"
+        const val RADIO_TOGGLE_LOCKOUT_KEY = "admin_radio_toggle"
     }
+
+    /**
+     * Lockout budget for the Wi-Fi/Bluetooth radio toggles (issue #6).
+     *
+     * Exposed so the status bar can charge its own budget rather than the kiosk-exit
+     * one, without duplicating the key string.
+     */
+    val RADIO_TOGGLE_BUDGET: String = RADIO_TOGGLE_LOCKOUT_KEY
 
     fun toggleKioskMode(active: Boolean) {
         prefs.edit().putBoolean("is_kiosk_mode_active", active).apply()
@@ -723,18 +788,40 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
      * become a way to permanently lock a terminal into kiosk mode. This path stays
      * rate-limited below and matches every admin account.
      */
-    fun verifyKioskUnlock(pin: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+    /**
+     * Authorizes leaving kiosk lockdown **or** a protected admin action, via any
+     * ADMIN account's PIN.
+     *
+     * Uses [SecurityHelper.verifyPinLenient] so an admin who has not yet completed the
+     * 4-digit migration can still exit kiosk lockdown - otherwise the migration would
+     * become a way to permanently lock a terminal into kiosk mode.
+     *
+     * SECURITY (issue #6): this previously shared a single flat 5-try/60s counter with
+     * the Wi-Fi/Bluetooth radio toggles in the status bar. That coupling was harmful in
+     * both directions: a user fumbling the Wi-Fi pill burned the admin's ability to
+     * release a cash register out of lockdown, and conversely an attacker probing the
+     * admin PIN could lock the radios out. The two actions now throttle independently.
+     *
+     * @param lockoutKey which budget to charge. Defaults to the kiosk-exit budget.
+     */
+    fun verifyKioskUnlock(
+        pin: String,
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit,
+        lockoutKey: String = KIOSK_UNLOCK_LOCKOUT_KEY
+    ) {
         viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val lockedUntil = prefs.getLong("kiosk_unlock_locked_until", 0L)
-            if (now < lockedUntil) {
-                val remainSec = ((lockedUntil - now) / 1000).toInt().coerceAtLeast(1)
-                onFailure("Lockout active. Try again in ${remainSec}s.")
+            // Check the lockout BEFORE verifying, so a correct PIN is still refused
+            // while a window is active. Checking afterwards would let an attacker
+            // keep guessing during the lockout and only be blocked from succeeding.
+            val active = adminUnlockLockout.lockoutMessage(lockoutKey)
+            if (active != null) {
+                onFailure(active)
                 return@launch
             }
 
             val admins = repository.getAllUsersSync().filter { it.role.equals("ADMIN", ignoreCase = true) }
-            // SECURITY (audit H2): constant-time verification only — the previous
+            // SECURITY (audit H2): constant-time verification only - the previous
             // `hash == pin` plaintext shortcut is removed. Legacy plaintext/SHA-256 hashes
             // remain verifiable through SecurityHelper and are upgraded to PBKDF2 on success.
             var isValid = false
@@ -752,17 +839,10 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             if (isValid) {
-                prefs.edit().putInt("kiosk_unlock_fail_count", 0).putLong("kiosk_unlock_locked_until", 0L).apply()
+                adminUnlockLockout.onSuccess(lockoutKey)
                 onSuccess()
             } else {
-                val fails = prefs.getInt("kiosk_unlock_fail_count", 0) + 1
-                if (fails >= 5) {
-                    prefs.edit().putInt("kiosk_unlock_fail_count", 0).putLong("kiosk_unlock_locked_until", now + 60_000L).apply()
-                    onFailure("Too many failed unlock attempts. Locked for 60 seconds.")
-                } else {
-                    prefs.edit().putInt("kiosk_unlock_fail_count", fails).apply()
-                    onFailure("PIN incorrect. Access Denied.")
-                }
+                onFailure(adminUnlockLockout.onFailure(lockoutKey))
             }
         }
     }

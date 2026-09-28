@@ -115,7 +115,6 @@ class MainActivity : FragmentActivity() {
                     val activeUser by viewModel.activeUser.collectAsState()
                     val isKioskActive by viewModel.isKioskModeActive.collectAsState()
                     val isAlwaysOnEnabled by viewModel.isAlwaysOnEnabled.collectAsState()
-                    var wasKioskActive by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
                     // SECURITY (issue #4): true when lockdown is NOT genuinely enforced
                     // (terminal is not provisioned as device owner, or the policy calls
                     // failed). Drives the REDUCED-mode warning so a cash register is never
@@ -189,12 +188,25 @@ class MainActivity : FragmentActivity() {
                             }
                             try {
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                                    registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
+                                    // SECURITY (issue #8): must be NOT_EXPORTED.
+                                    // ACTION_SCREEN_OFF is a protected system broadcast that
+                                    // only the system can send, so there is no functional
+                                    // reason to export this receiver. Exported, any app on
+                                    // the terminal could spam it to repeatedly relaunch
+                                    // StorePoint in the foreground - and the receiver is
+                                    // only registered while kiosk lockdown is active, i.e.
+                                    // exactly when the device is supposed to be secured.
+                                    // This was the only RECEIVER_EXPORTED in the codebase;
+                                    // the manifest and BootReceiver were already tightened
+                                    // for the same class of spoofing risk (audit M1/M2).
+                                    registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
                                 } else {
+                                    // Pre-33 default for a system-only broadcast is already
+                                    // effectively private; nothing to opt into.
                                     registerReceiver(receiver, filter)
                                 }
                             } catch (e: Exception) {
-                                android.util.Log.e("MainActivity", "Failed to register shutdown/quick settings dismisser", e)
+                                android.util.Log.e("MainActivity", "Failed to register screen-off receiver", e)
                             }
                             onDispose {
                                 try {
@@ -208,75 +220,14 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    // Start/Stop Device LockTask for kiosk mode stability safely
+                    // SECURITY (issue #7): lock-task is now owned by the Activity, not by
+                    // a Compose effect. The effect only expressed intent; the actual
+                    // enter/exit/reconcile lifecycle lives in syncKioskLockTask(), which
+                    // the Activity also calls from onResume/onStop. Compose state
+                    // (`wasKioskActive`) was lost on configuration change while the OS
+                    // stayed locked, leaving the two permanently out of step.
                     androidx.compose.runtime.LaunchedEffect(isKioskActive) {
-                        if (isKioskActive) {
-                            try {
-                                val dpm = getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as? android.app.admin.DevicePolicyManager
-                                val adminName = android.content.ComponentName(this@MainActivity, StorePointDeviceAdminReceiver::class.java)
-                                if (dpm != null) {
-                                    val isDeviceOwner = dpm.isDeviceOwnerApp(packageName)
-                                    if (isDeviceOwner) {
-                                        // Whitelist our app for true lock task mode so we don't show the screen pinning toast
-                                        dpm.setLockTaskPackages(adminName, arrayOf(packageName))
-                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                                            dpm.setLockTaskFeatures(adminName, android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
-                                        }
-                                        android.util.Log.d("MainActivity", "Kiosk: Whitelisting for True Lock Task Mode configured.")
-                                    } else {
-                                        // SECURITY (issue #4): the previous branch was a bare
-                                        // Log.d and lockdown proceeded anyway, so the owner was
-                                        // told "System entered secure Kiosk lockdown" while the
-                                        // terminal was in dismissable screen-pinning mode. Now
-                                        // surface it and record the degraded state.
-                                        android.util.Log.w(
-                                            "MainActivity",
-                                            "Kiosk: NOT device owner - lockdown runs as dismissable screen pinning."
-                                        )
-                                        degradedKioskLockdown = true
-                                    }
-                                } else {
-                                    degradedKioskLockdown = true
-                                }
-                            } catch (e: Throwable) {
-                                android.util.Log.e("MainActivity", "Failed setting LOCK_TASK_FEATURE_NONE or setLockTaskPackages", e)
-                                degradedKioskLockdown = true
-                            }
-
-                            try {
-                                startLockTask()
-                                wasKioskActive = true
-                                if (degradedKioskLockdown) {
-                                    // Fail loudly rather than let the owner believe a cash
-                                    // register is secured when it is not.
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Kiosk entered in REDUCED mode: this terminal is not provisioned as " +
-                                            "device owner, so lockdown is dismissable screen pinning only. " +
-                                            "See Admin > Security.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            } catch (e: Throwable) {
-                                android.util.Log.e("MainActivity", "LockTask start failed: falling back to basic Compose suppression", e)
-                                degradedKioskLockdown = true
-                            }
-                        } else {
-                            val am = getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
-                            val isLocked = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                am?.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE
-                            } else {
-                                am?.isInLockTaskMode == true
-                            }
-                            if (wasKioskActive || isLocked) {
-                                try {
-                                    stopLockTask()
-                                } catch (e: Throwable) {
-                                    android.util.Log.e("MainActivity", "LockTask stop failed", e)
-                                }
-                                wasKioskActive = false
-                            }
-                        }
+                        syncKioskLockTask(isKioskActive)
                     }
 
                     val navController = rememberNavController()
@@ -410,7 +361,13 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         if (viewModel.isKioskModeActive.value) {
             hideSystemBars()
-            reassertKioskLock()
+            // SECURITY (issue #7): reconcile the OS lock state on every resume. The OS can
+            // drop lock-task across process death or a system-initiated restart, and this
+            // is the reliable point to re-assert it. Previously this only called the
+            // debounced re-assert, so a genuine OS-side drop could survive.
+            if (!isOsLockTaskActive() || !lockTaskEngaged) {
+                syncKioskLockTask(true)
+            }
         }
     }
 
@@ -432,44 +389,166 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /** Timestamp of the last re-assert, used to debounce focus churn. */
+    private var lastKioskReassertAt = 0L
+
+    /**
+     * Re-asserts lock-task if the OS has dropped it.
+     *
+     * SECURITY (issue #5/#7): this previously ran an unguarded `startActivity(this)` +
+     * `startLockTask()` on every focus change, every leave-hint, and every Home key
+     * event. Focus oscillates during ordinary use (dialogs, the shade, rotation), so
+     * that could stack into repeated activity relaunches. It is now debounced and
+     * routes through the single lock-task owner.
+     */
     private fun reassertKioskLock() {
         if (!viewModel.isKioskModeActive.value) return
+
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastKioskReassertAt < KIOSK_REASSERT_DEBOUNCE_MS) return
+        lastKioskReassertAt = now
+
+        // Nothing to do if the OS still has us locked; avoid a needless relaunch.
+        if (isOsLockTaskActive() && lockTaskEngaged) return
+
         try {
-            val am = getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
-            val isLocked = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                am?.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE
-            } else {
-                @Suppress("DEPRECATION")
-                am?.isInLockTaskMode == true
+            val bringToFront = android.content.Intent(this, MainActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
-            if (!isLocked) {
-                val bringToFront = android.content.Intent(this, MainActivity::class.java).apply {
-                    flags = android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-                }
-                startActivity(bringToFront)
-                startLockTask()
-                android.util.Log.d("MainActivity", "Kiosk mode re-asserted LockTask lock successfully.")
-            }
+            startActivity(bringToFront)
+            // Single owner: do not call startLockTask() directly here.
+            syncKioskLockTask(true)
+            android.util.Log.d("MainActivity", "Kiosk mode re-asserted LockTask lock successfully.")
         } catch (e: Throwable) {
             android.util.Log.w("MainActivity", "Kiosk lock reassert error: ${e.message}")
         }
     }
 
+    private companion object {
+        /** Minimum gap between lock-task re-asserts, to stop focus churn causing a loop. */
+        const val KIOSK_REASSERT_DEBOUNCE_MS = 1_500L
+    }
+
+    /**
+     * Releases kiosk lockdown from outside the lock-task state machine.
+     *
+     * SECURITY (issue #7): the status bar's emergency-unlock gesture used to call
+     * `stopLockTask()` on the Activity directly, bypassing the lock-task owner and
+     * leaving its internal state stale. Routing it through the owner keeps the app and
+     * the OS in step. Public so the gesture can reach it, but the transition itself
+     * remains owned here.
+     */
+    fun releaseKioskLockTask() {
+        viewModel.toggleKioskMode(false)
+        syncKioskLockTask(false)
+    }
+
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        // SECURITY (issue #5): the previous implementation swallowed KEYCODE_HOME and
+        // KEYCODE_APP_SWITCH to prevent leaving the app. Those keys are not delivered
+        // to applications on modern Android, so both branches were unreachable - dead
+        // code that gave a false impression of defence in depth. Real enforcement comes
+        // from LockTask / device-owner policy (issue #4), and is asserted in
+        // onWindowFocusChanged below. Predictive back is separately suppressed in
+        // setContent via PredictiveBackHandler.
         if (viewModel.isKioskModeActive.value) {
-            when (keyCode) {
-                android.view.KeyEvent.KEYCODE_BACK -> {
-                    // Suppress back key in kiosk mode to prevent unpinning combination
-                    return true
-                }
-                android.view.KeyEvent.KEYCODE_HOME,
-                android.view.KeyEvent.KEYCODE_APP_SWITCH -> {
-                    reassertKioskLock()
-                    return true
-                }
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                // Suppress back in kiosk mode to prevent navigating out of the register.
+                return true
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    // --- Lock-task ownership (issue #7) ---
+
+    /**
+     * True when we have asked the OS to engage lock-task and have not been told it
+     * stopped. Lives on the Activity, not in Compose `remember`, so it survives
+     * configuration change and low-memory process recreation.
+     */
+    private var lockTaskEngaged = false
+
+    /** Reads the OS lock-task state, which is the source of truth. */
+    private fun isOsLockTaskActive(): Boolean {
+        val am = getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            ?: return false
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            am.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE
+        } else {
+            @Suppress("DEPRECATION")
+            am.isInLockTaskMode
+        }
+    }
+
+    /**
+     * Reconciles our lock-task state with the OS, entering or exiting lockdown.
+     *
+     * SECURITY (issue #7): this is the single owner of the lock-task lifecycle. It was
+     * previously a Compose `LaunchedEffect` keyed on `isKioskActive`, so the transition
+     * was coupled to composition: a cancelled effect, an activity recreation, or a
+     * second caller (`KioskStatusBar` called `stopLockTask()` directly) could leave the
+     * app and the OS permanently out of step. It is now driven from the Activity and
+     * called on state change *and* from onResume, so the OS state is re-asserted after
+     * anything that could have dropped it.
+     *
+     * @return the resulting lockdown strength.
+     */
+    private fun syncKioskLockTask(kioskActive: Boolean): LockdownStrength {
+        if (!kioskActive) {
+            if (lockTaskEngaged || isOsLockTaskActive()) {
+                try {
+                    stopLockTask()
+                    android.util.Log.i("MainActivity", "Kiosk lockdown released.")
+                } catch (e: Throwable) {
+                    android.util.Log.e("MainActivity", "LockTask stop failed", e)
+                }
+            }
+            lockTaskEngaged = false
+            return StorePointDeviceAdminReceiver.isDeviceOwner(this)
+                .let { if (it) LockdownStrength.DeviceOwnerEnforced else LockdownStrength.ScreenPinningOnly }
+        }
+
+        // Entering lockdown.
+        var degraded = false
+        try {
+            val dpm = getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as? android.app.admin.DevicePolicyManager
+            val adminName = android.content.ComponentName(this, StorePointDeviceAdminReceiver::class.java)
+            if (dpm != null && dpm.isDeviceOwnerApp(packageName)) {
+                // Whitelist for true lock task so the OS shows no pinning toast.
+                dpm.setLockTaskPackages(adminName, arrayOf(packageName))
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    dpm.setLockTaskFeatures(adminName, android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
+                }
+            } else {
+                // SECURITY (issue #4): not being device owner means lockdown is only
+                // dismissable screen pinning. Record it so the owner is told.
+                android.util.Log.w("MainActivity", "Kiosk: NOT device owner - screen pinning only.")
+                degraded = true
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "Failed applying lock-task policy", e)
+            degraded = true
+        }
+
+        try {
+            startLockTask()
+            lockTaskEngaged = true
+            if (degraded) {
+                // Fail loudly: a cash register must never look secured when it is not.
+                Toast.makeText(
+                    this,
+                    "Kiosk entered in REDUCED mode: this terminal is not provisioned as device " +
+                        "owner, so lockdown is dismissable screen pinning only. See Admin > Security.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "LockTask start failed", e)
+            lockTaskEngaged = false
+            degraded = true
+        }
+        return if (degraded) LockdownStrength.ScreenPinningOnly else LockdownStrength.DeviceOwnerEnforced
     }
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {

@@ -10,6 +10,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import com.munzo.storepoint.MainActivity
 import com.munzo.storepoint.util.SecurityHelper
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -261,6 +262,10 @@ fun KioskStatusBar(
                     onClick = {
                         viewModel.verifyKioskUnlock(
                             pin = adminAuthPin,
+                            // SECURITY (issue #6): radio toggles charge their own budget.
+                            // They used to share the kiosk-exit counter, so fumbling the
+                            // Wi-Fi pill could lock an admin out of releasing a register.
+                            lockoutKey = viewModel.RADIO_TOGGLE_BUDGET,
                             onSuccess = {
                                 showAdminAuthDialog = false
                                 val action = pendingAction
@@ -339,18 +344,22 @@ fun KioskStatusBar(
                         viewModel.verifyKioskUnlock(
                             pin = unlockInput,
                             onSuccess = {
-                                viewModel.toggleKioskMode(false)
                                 showSecretUnlockDialog = false
-                                val activity = context.findActivity()
+                                // SECURITY (issue #7): this used to call
+                                // activity.stopLockTask() directly, making KioskStatusBar a
+                                // second, uncoordinated owner of the lock-task lifecycle. The
+                                // Activity's syncKioskLockTask() is now the only owner, so
+                                // releasing the lock here cannot leave the Activity's
+                                // lockTaskEngaged flag out of step with the OS.
+                                val activity = context.findActivity() as? MainActivity
                                 if (activity != null) {
-                                    try {
-                                        activity.stopLockTask()
-                                        Toast.makeText(context, "Kiosk Lockdown Mode successfully disabled by Admin.", Toast.LENGTH_LONG).show()
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "Kiosk Mode disabled (stopLockTask failed: ${e.localizedMessage})", Toast.LENGTH_LONG).show()
-                                    }
+                                    activity.releaseKioskLockTask()
+                                    Toast.makeText(context, "Kiosk Lockdown Mode successfully disabled by Admin.", Toast.LENGTH_LONG).show()
                                 } else {
-                                    Toast.makeText(context, "Kiosk Mode disabled in ViewModel.", Toast.LENGTH_SHORT).show()
+                                    // No Activity reachable (should not happen): still clear
+                                    // the persisted flag so the next launch is consistent.
+                                    viewModel.toggleKioskMode(false)
+                                    Toast.makeText(context, "Kiosk Mode disabled.", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             onFailure = { err ->

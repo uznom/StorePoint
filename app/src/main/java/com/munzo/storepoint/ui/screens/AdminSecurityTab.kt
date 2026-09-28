@@ -1651,39 +1651,60 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Create a numeric PIN to lock/unlock Kiosk Mode. Cashiers will not be able to disable Kiosk Mode without this code.")
-                    OutlinedTextField(
-                        value = pinSetupInput,
-                        onValueChange = { if (it.length <= 8) pinSetupInput = it.filter { c -> c.isDigit() } },
-                        label = { Text("Create PIN (Numbers only)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
+                    PinPadEntry(
+                        pin = pinSetupInput,
+                        onPinChange = { newPin ->
+                            // Exactly PIN_LENGTH digits, now enforced centrally by
+                            // setKioskPin() rather than a local "<= 8" filter.
+                            pinSetupInput = newPin.take(SecurityHelper.PIN_LENGTH)
+                            pinSetupError = ""
+                        },
+                        pinLength = SecurityHelper.PIN_LENGTH,
+                        isMasked = false,
+                        isError = pinSetupError.isNotEmpty(),
+                        errorMessage = pinSetupError.ifEmpty { null },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
-                        value = pinSetupConfirmInput,
-                        onValueChange = { if (it.length <= 8) pinSetupConfirmInput = it.filter { c -> c.isDigit() } },
-                        label = { Text("Confirm PIN") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
+                    PinPadEntry(
+                        pin = pinSetupConfirmInput,
+                        onPinChange = { newPin ->
+                            pinSetupConfirmInput = newPin.take(SecurityHelper.PIN_LENGTH)
+                            pinSetupError = ""
+                        },
+                        pinLength = SecurityHelper.PIN_LENGTH,
+                        isMasked = false,
+                        isError = pinSetupError.isNotEmpty() && pinSetupInput == pinSetupConfirmInput,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    if (pinSetupError.isNotEmpty()) {
-                        Text(pinSetupError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
+                    Text(
+                        // The kiosk PIN is held to the same policy as every user PIN
+                        // (issue #9) - it is the app's highest-value credential.
+                        text = "Confirm both entries match. ${SecurityHelper.pinPolicyHint()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             },
             confirmButton = {
                 Button(
+                    enabled = pinSetupInput.isNotEmpty() && pinSetupInput == pinSetupConfirmInput,
                     onClick = {
-                        if (pinSetupInput.length < 4) {
-                            pinSetupError = "PIN must be at least 4 digits."
-                        } else if (pinSetupInput != pinSetupConfirmInput) {
+                        if (pinSetupInput != pinSetupConfirmInput) {
                             pinSetupError = "PINs do not match."
                         } else {
-                            viewModel.setKioskPin(pinSetupInput)
-                            showKioskPinSetupDialog = false
-                            viewModel.toggleKioskMode(true)
-                            Toast.makeText(context, "Kiosk PIN configured. Entering lockdown.", Toast.LENGTH_SHORT).show()
+                            // Returns a reason on rejection; the dialog stays open so
+                            // the admin can correct it rather than silently losing the
+                            // setting.
+                            val rejection = viewModel.setKioskPin(pinSetupInput)
+                            if (rejection != null) {
+                                pinSetupError = rejection
+                            } else {
+                                showKioskPinSetupDialog = false
+                                pinSetupInput = ""
+                                pinSetupConfirmInput = ""
+                                viewModel.toggleKioskMode(true)
+                                Toast.makeText(context, "Kiosk PIN configured. Entering lockdown.", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 ) {
