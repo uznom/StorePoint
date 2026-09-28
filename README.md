@@ -49,6 +49,9 @@
 - **Top Performers**: Ranked lists of best-selling products by quantity sold and revenue generated.
 
 ### 🔒 Kiosk Mode & Security
+- **Fingerprint-First Sign-In**: Every role — Admin and Cashier alike — can enrol a device biometric and reach the register in zero taps. The biometric prompt fires automatically for the previous user, and the 4-digit PIN auto-submits on the last digit. The PIN remains as a fallback, and a "Sign in as someone else" action guarantees a failed sensor never strands anyone.
+- **4-Digit PIN with Weak-PIN Rejection**: PINs are exactly 4 digits, salted and hashed with PBKDF2-HMAC-SHA256 (120,000 iterations). Trivially guessable values (`0000`, `1234`, `2580`, `1212`, …) are refused at creation.
+- **Progressive Lockout**: Repeated failures back off per account (30s → 60s → 120s → 300s). Tracked per-username so one attacker cannot lock out the whole register.
 - **Role-Based Access**: Multi-user support with PIN protection separating Admin dashboards from Cashier POS terminals.
 - **Dedicated Kiosk Mode**: Optional full-screen kiosk lock to prevent cashiers from exiting to the Android launcher or accessing system settings.
 
@@ -226,7 +229,7 @@ StorePoint is pre-configured with strict gitignore rules and offline-first archi
 - **Keystores & Signing Keys**: `*.keystore`, `*.keystore.base64`, `*.jks`, `*.key`, and `debug.keystore.base64` are strictly gitignored. Production signing keys are provided via environment variables (`KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_PASSWORD`).
 - **Offline Self-Contained Architecture**: StorePoint requires no external API keys or cloud AI tokens; everything runs securely and locally.
 - **Service Accounts & Cloud Credentials**: `google-services.json`, `credentials.json`, and cloud service account keys are automatically ignored by `.gitignore`.
-- **Local Data Protection**: All customer accounts and admin authorization PINs are hashed using PBKDF2 with unique salts before being saved to local SQLite.
+- **Local Data Protection**: All customer accounts and admin authorization PINs are hashed using PBKDF2 (120,000 iterations) with unique salts before being saved to local SQLite. Plaintext PINs are never written to disk.
 
 ## Kiosk Lockdown & Terminal Provisioning (ADB)
 

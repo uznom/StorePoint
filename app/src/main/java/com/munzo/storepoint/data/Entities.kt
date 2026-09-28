@@ -58,7 +58,12 @@ data class Category(
     tableName = "products",
     indices = [
         Index(value = ["categoryId"]),
-        Index(value = ["barcode"])
+        Index(value = ["barcode"]),
+        // The POS search path filters/sorts the whole catalogue by name on every
+        // keystroke. This is the single hottest read in the app.
+        Index(value = ["name"]),
+        // Backs the "low stock" / "running out" badges without scanning every row.
+        Index(value = ["stockCount"])
     ]
 )
 data class Product(
@@ -172,7 +177,24 @@ data class CashierSession(
     val status: String = "ACTIVE" // "ACTIVE", "CLOSED"
 )
 
-@Entity(tableName = "transactions")
+/**
+ * Sale header.
+ *
+ * `timestamp` is indexed because every analytics view (today's sales, date ranges,
+ * period comparisons) filters or sorts on it, and it is the only column that grows
+ * without bound on a busy store. Without the index SQLite falls back to a full scan
+ * plus a sort for every dashboard load.
+ */
+@Entity(
+    tableName = "transactions",
+    indices = [
+        Index(value = ["timestamp"]),
+        // Supports the per-cashier sales breakdown without a table scan.
+        Index(value = ["cashierUsername"]),
+        // Composite index for the payment-method split over a date range.
+        Index(value = ["paymentMethod", "timestamp"])
+    ]
+)
 data class Transaction(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val timestamp: Long,
@@ -199,7 +221,11 @@ data class Transaction(
     ],
     indices = [
         Index(value = ["transactionId"]),
-        Index(value = ["productId"])
+        Index(value = ["productId"]),
+        // Covers the top-sellers report, which joins this table to a timestamp range
+        // on `transactions` and then groups by product. The composite form lets SQLite
+        // satisfy the grouping from the index instead of sorting every line item.
+        Index(value = ["productId", "transactionId"])
     ]
 )
 data class TransactionItem(

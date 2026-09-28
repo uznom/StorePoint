@@ -11,7 +11,64 @@ StorePoint is an offline-first Point of Sale (POS) and inventory tracking applic
 1. **Offline-First / Local Master**: The local SQLite database (via Android Jetpack Room) is the authoritative source of truth. No cloud sync is required for operation.
 2. **Unidirectional Data Flow (UDF)**: The UI observes state streams emitted by `StorePointViewModel` via Kotlin `StateFlow`. UI events (cart adds, refunds, checkout) trigger ViewModel functions that mutate data via `StorePointRepository`.
 3. **Declarative UI**: 100% Jetpack Compose with Material Design 3. No XML views or legacy layouts.
-4. **Data Integrity & Safe Migrations**: Incremental schema migrations (`MIGRATION_1_2` through `MIGRATION_9_10`) safeguard historical retail data. Schema mismatches fail-closed (no destructive fallback migration).
+4. **Data Integrity & Safe Migrations**: Incremental schema migrations (`MIGRATION_1_2` through `MIGRATION_14_15`) safeguard historical retail data. Schema mismatches fail-closed (no destructive fallback migration).
+
+---
+
+## Authentication Architecture
+
+### Credential Model
+- PINs are **4 digits** (`SecurityHelper.PIN_LENGTH`), salted and hashed with PBKDF2-HMAC-SHA256 at 120,000 iterations.
+- A 4-digit PIN has a 10,000-combination keyspace, so it is **not** the sole security boundary. Compensating controls:
+  - `SecurityHelper.isWeakPin` refuses repeats, ascending/descending runs, and keyboard-walk patterns at creation time.
+  - `StorePointViewModel.lockoutScheduleMs` applies an escalating, **per-account** backoff (30s → 60s → 120s → 300s).
+  - Biometric sign-in is the primary path for enrolled users.
+
+### Biometric Sign-In
+- `BiometricAuthHelper` is built on `androidx.biometric` (not the deprecated platform `android.hardware.biometrics` API) and requests **only `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`**. Weak biometrics are rejected because this gate protects a cash register and kiosk lockdown.
+- `checkAvailability()` distinguishes *no hardware* (hide the affordance) from *nothing enrolled* (offer enrolment), which a boolean cannot.
+- `authenticate()` returns a classified `BiometricOutcome` (`SUCCESS` / `FALLBACK` / `RECOVERABLE_ERROR` / `FATAL_ERROR` / `UNAVAILABLE`) so the UI never string-matches error text.
+- Fingerprint resolves to **exactly one** enrolled account. It does not fall back to "the first non-admin user".
+- `MainActivity` extends `FragmentActivity` (a `ComponentActivity` subclass) purely so the prompt can attach its fragment.
+- Accounts are auto-enrolled on first successful PIN login; the admin can revoke per-user via `setBiometricEnrolledForUser`.
+
+### Legacy 6-Digit Migration
+- `MIGRATION_13_14` adds `biometricEnrolled` and `pinResetRequired`, marking every pre-existing account as needing a reset.
+- `login()` **refuses** accounts flagged `pinResetRequired`.
+- `PinResetScreen` is a 3-step chunked wizard: verify the existing credential → choose → confirm. Step 1 requires the *current* PIN, so the screen cannot be used to hijack another account.
+- `SecurityHelper.verifyPinLenient` accepts 4 or 6 digits and is used **only** by the reset gate and kiosk unlock — the latter so an un-migrated admin can still exit kiosk lockdown.
+
+---
+
+## Session State Cache
+
+`SessionStateCache` (`util/SessionStateCache.kt`) persists UI state that does not belong in the database, backed by `SharedPreferences` to match the existing `storepoint_sys_prefs` convention:
+
+| Key | Purpose |
+|---|---|
+| `cart_draft` | In-progress basket, mirrored to disk on every cart mutation |
+| `last_payment_method` | Removes a repeated choice per transaction (Hick's Law) |
+| `last_pos_tab` / `last_admin_tab` / `last_search_query` | Reopens the workspace where it was left |
+| `did_restore_cart` | Drives the "Restored your basket" acknowledgement |
+
+Restore re-resolves product **ids** against the live catalogue and drops any line whose quantity now exceeds stock, so stale prices and quantities are never resurrected. `logout()` deliberately does not clear the cart (Zeigarnik Effect); only an explicit clear or a completed checkout discards the draft.
+
+---
+
+## Analytics Performance
+
+Room only emits `CREATE INDEX` for a *fresh* install, so `MIGRATION_14_15` creates the analytics hot-path indices on upgrade:
+
+| Index | Backs |
+|---|---|
+| `transactions(timestamp)` | Daily/period sales rollups |
+| `transactions(cashierUsername)` | Per-cashier breakdown |
+| `transactions(paymentMethod, timestamp)` | Payment split over a date range |
+| `transaction_items(productId, transactionId)` | Top-sellers grouping |
+| `products(name)` | POS catalogue search (hottest read in the app) |
+| `products(stockCount)` | Low-stock badges |
+
+The migration is purely additive and fail-closed: no blanket `try/catch`, so a genuine failure rolls the transaction back rather than committing a half-indexed schema.
 
 ---
 

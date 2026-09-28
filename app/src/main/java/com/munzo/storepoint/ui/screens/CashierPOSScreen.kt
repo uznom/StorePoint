@@ -98,6 +98,26 @@ fun CashierPOSScreen(
     var activePortraitTab by remember { mutableStateOf(0) }
     var activeCatalogSection by remember { mutableStateOf(0) } // 0 = Standard Products, 1 = Digital Services
 
+    // --- Restored-basket notice -------------------------------------------------
+    // Silently repopulating the cart would leave the cashier wondering where the
+    // items came from (Recognition over Recall). Acknowledge the restore explicitly,
+    // then clear the flag so it cannot re-fire on recomposition.
+    val restoredLineCount = viewModel.restoredCartLineCount
+    var showRestoredNotice by remember { mutableStateOf(false) }
+    LaunchedEffect(restoredLineCount) {
+        if (restoredLineCount > 0) {
+            showRestoredNotice = true
+            viewModel.acknowledgeCartRestore()
+        }
+    }
+    // Auto-dismiss after a few seconds; the information is confirmatory, not blocking.
+    LaunchedEffect(showRestoredNotice) {
+        if (showRestoredNotice) {
+            kotlinx.coroutines.delay(4000)
+            showRestoredNotice = false
+        }
+    }
+
     val isProductsLoading = products.isEmpty() && categories.isEmpty()
 
     // Dialog flags
@@ -3652,6 +3672,46 @@ fun CashierPOSScreen(
                     }
                 }
             )
+
+            // Restored-basket notice. Overlaid rather than inserted into the layout so
+            // it never shifts the POS grid — the cashier's muscle memory for product
+            // positions must stay valid (Fitts's Law: don't move the targets).
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                AnimatedVisibility(
+                    visible = showRestoredNotice,
+                    enter = fadeIn() + slideInVertically { -it },
+                    exit = fadeOut() + slideOutVertically { -it }
+                ) {
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .testTag("cart_restored_notice")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Restore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                text = "Restored $restoredLineCount item${if (restoredLineCount == 1) "" else "s"} from your last session",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
+            }
         }
 
 

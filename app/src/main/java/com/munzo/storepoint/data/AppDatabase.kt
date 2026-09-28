@@ -27,7 +27,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PurchaseOrder::class,
         PurchaseOrderItem::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -525,6 +525,39 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds the analytics hot-path indices.
+         *
+         * Purely additive and non-destructive: only CREATE INDEX IF NOT EXISTS, so no
+         * rows are touched and a re-run after an interrupted upgrade is a no-op. Each
+         * index backs a specific query path:
+         *  - `transactions(timestamp)`               daily/period sales rollups
+         *  - `transactions(cashierUsername)`         per-cashier breakdown
+         *  - `transactions(paymentMethod,timestamp)`  payment split over a date range
+         *  - `transaction_items(productId,transactionId)` top-sellers grouping
+         *  - `products(name)`                        POS catalogue search (hottest read)
+         *  - `products(stockCount)`                  low-stock badges
+         *
+         * Indices are built once here rather than in the entity annotations alone,
+         * because Room only emits CREATE INDEX for a *fresh* install.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val statements = listOf(
+                    "CREATE INDEX IF NOT EXISTS `index_transactions_timestamp` ON `transactions` (`timestamp`)",
+                    "CREATE INDEX IF NOT EXISTS `index_transactions_cashierUsername` ON `transactions` (`cashierUsername`)",
+                    "CREATE INDEX IF NOT EXISTS `index_transactions_paymentMethod_timestamp` ON `transactions` (`paymentMethod`, `timestamp`)",
+                    "CREATE INDEX IF NOT EXISTS `index_transaction_items_productId_transactionId` ON `transaction_items` (`productId`, `transactionId`)",
+                    "CREATE INDEX IF NOT EXISTS `index_products_name` ON `products` (`name`)",
+                    "CREATE INDEX IF NOT EXISTS `index_products_stockCount` ON `products` (`stockCount`)"
+                )
+                // No blanket try/catch: a genuine failure here (missing table, disk
+                // error) must abort the migration and roll back, rather than silently
+                // committing a half-indexed schema (audit M4).
+                statements.forEach(db::execSQL)
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -545,7 +578,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_10_11,
                     MIGRATION_11_12,
                     MIGRATION_12_13,
-                    MIGRATION_13_14
+                    MIGRATION_13_14,
+                    MIGRATION_14_15
                 )
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                                  // Room 2.7 deprecates the no-arg overload; the boolean overload's

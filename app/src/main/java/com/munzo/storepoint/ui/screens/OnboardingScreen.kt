@@ -482,7 +482,7 @@ fun TermsAndConditionsSlide(
 
                     termsSection(
                         "8. Privacy & Security",
-                        "No personal or business data leaves your device. Admin PINs and staff credentials are hashed locally with PBKDF2 and salted before storage. You are responsible for the physical security of your device, for safeguarding administrator PINs, and for managing staff accounts with appropriate roles."
+                        "No personal or business data leaves your device. Admin PINs and staff credentials are hashed locally with PBKDF2 and salted before storage; plaintext PINs are never written to disk. If you enrol a fingerprint, the biometric check is performed by Android's secure hardware and only the pass/fail result is handled by StorePoint — biometric data never enters this app. You are responsible for the physical security of your device, for safeguarding administrator PINs, and for managing staff accounts with appropriate roles."
                     )
 
                     termsSection(

@@ -37,7 +37,7 @@ A guide for store owners, managers, and cashiers using the StorePoint Point of S
 When launching StorePoint for the first time, the **Setup Wizard** will guide you through the essentials:
 1. **Store Name**: Enter your shop name (e.g., *Aling Nena's Sari-Sari Store*).
 2. **Currency**: Set your store's currency symbol (defaults to `₱` Philippine Peso).
-3. **Admin PIN**: Create a secure 4 to 6 digit Master PIN used to access inventory, reports, and administrative settings.
+3. **Admin PIN**: Create a secure 4-digit Master PIN used to access inventory, reports, and administrative settings. Avoid repeats (`0000`) and simple patterns (`1234`, `2580`) — StorePoint rejects them.
 4. **Initial Services**: Enable GCash, Maya, or Telco Load features if your store offers digital cash-in/out services.
 
 ---
@@ -45,9 +45,14 @@ When launching StorePoint for the first time, the **Setup Wizard** will guide yo
 ## 2. Cashier Operations
 
 ### Starting a Shift
-1. Log in with your Cashier PIN or name.
+1. Sign in — StorePoint offers three ways:
+   - **Fingerprint** (fastest): if you have enrolled, the prompt appears automatically when the app opens and you just touch the sensor.
+   - **4-digit PIN**: type your username, then your PIN. Sign-in submits automatically on the 4th digit.
+   - **Badge scan**: tap **Tap to Scan Badge** and hold your staff barcode to the camera.
 2. Enter the **Opening Cash Float** (the cash bills and coins already inside the cash drawer before sales start).
 3. Tap **Start Shift**.
+
+> **Upgrading from an older version?** Your account now needs a **4-digit PIN** instead of 6. Sign in once with your existing 6-digit PIN, choose a new 4-digit PIN, and you're done. Your old PIN still works for that one step — it is never accepted for normal sign-in afterwards.
 
 ### Adding Products to Cart
 - **Tap Product Card**: Tap any item in the catalog grid.
@@ -134,6 +139,12 @@ In the product edit screen, tap **Manage Variants** to add custom unit conversio
 Navigate to **Users & Security** to manage staff accounts. Assign roles:
 - **Cashier**: Can only access the POS sales terminal and their own shift drawer.
 - **Manager / Admin**: Has full access to inventory, costs, supplier orders, reports, and settings.
+
+**PIN rules:** every PIN is exactly **4 digits**. Obvious values (`0000`, `1111`, `1234`, `4321`, `2580`, `1212`) are rejected for every account, including ones you create for staff. PINs are salted and hashed with PBKDF2 before storage — the app never writes a plaintext PIN to disk.
+
+**Fingerprint sign-in:** any account (Admin or Cashier) can enrol a fingerprint. The first time a staff member signs in successfully with their PIN, StorePoint offers to bind a fingerprint to that account. Afterwards they reach the register in zero taps. Admins can revoke enrolment per user from **Admin Dashboard → Security → Biometric Security**.
+
+**If someone forgets their PIN:** an Admin can reset it from the same Staff list. Because a 4-digit PIN is a short secret, StorePoint applies an escalating lockout after repeated wrong attempts (30s → 60s → 120s → 300s), tracked per account.
 
 ---
 
