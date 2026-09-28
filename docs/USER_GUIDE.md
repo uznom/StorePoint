@@ -110,6 +110,45 @@ StorePoint includes dedicated cash-in and cash-out ledgers for micro-retailers:
 - **GCash / Maya Cash-In**: Customer hands cash to the store; store sends digital money to the customer's mobile number. The app adds the service fee and increases physical cash while decreasing the store's digital balance.
 - **GCash / Maya Cash-Out**: Customer sends digital money to the store; store hands out cash bills. The app deducts the physical cash drawer and increases the digital balance.
 
+### Reloading Your Own Wallet Float (Owners)
+
+The balances above represent **your own float** - the money you personally loaded into
+your GCash / Smart-TNT / Globe-TM accounts so the store can sell against it. When you
+top up one of those wallets, record it in StorePoint so the register matches reality:
+
+1. Open **Admin Dashboard > Security**.
+2. Find the **Reload Wallet Float** card.
+3. Select the wallet you funded (**GCash**, **Smart / TNT**, or **Globe / TM**).
+4. Tap **Reload**, enter the amount you loaded, and an optional reference number.
+5. Confirm. The float increases and a `RELOAD` entry is written to the ledger.
+
+> **Admin only.** A cashier cannot reload a float. A staff member topping up their own
+> float is a direct route to unaccounted cash, so the check is enforced in the app
+> itself, not just hidden behind a disabled button.
+
+### Viewing the Wallet Ledger
+
+Tap **View ledger history** on the same card to see every movement for a wallet:
+reloads, customer loads that drew the float down, and shift-close reconciliations -
+each with the running balance. The **system-derived balance** shown at the top is the
+sum of all recorded movements, and is the figure StorePoint reconciles against when you
+count the physical wallet at the end of a shift.
+
+This exists because a wallet balance alone cannot explain itself: without a ledger, a
+peso removed by a customer load looks identical to a mistyped adjustment, and a wrong
+keystroke silently overwrites the float with no trace. With the ledger, every peso in
+and out is attributable.
+
+### Reclaiming a Terminal (to wipe/reinstall)
+
+If you need to deliberately remove StorePoint from a terminal you provisioned as device
+owner, you must first revoke the device-owner role - the app blocks its own uninstall
+while that role is active:
+
+```bash
+adb shell dpm remove-active-admin com.munzo.storepoint/.StorePointDeviceAdminReceiver
+```
+
 ---
 
 ## 4. Admin & Inventory Management
@@ -233,4 +272,70 @@ adb shell settings put global stay_on_while_plugged_in 3
 # Grant runtime permissions directly without on-screen prompts
 adb shell pm grant com.munzo.storepoint android.permission.CAMERA
 adb shell pm grant com.munzo.storepoint android.permission.POST_NOTIFICATIONS
+```
+
+---
+
+### Method 4: Provisioning a Terminal as Device Owner (REQUIRED for real Kiosk Lockdown)
+
+> **Read this before relying on kiosk mode to secure a cash register.**
+
+StorePoint has three security states. They are **not** interchangeable:
+
+| Status shown in Admin > Security | What it actually means |
+|---|---|
+| `FULL TERMINAL LOCKDOWN` | StorePoint is the **device owner**. Kiosk lockdown is genuinely enforced. |
+| `REDUCED - SCREEN PINNING ONLY` | Device Administrator is on, but the app is **not** device owner. Lockdown is dismissable. |
+| `PROTECTION OFF` | No device protection. Nothing is enforced. |
+
+**Why this matters:** enabling *Device Administrator* on its own does **not** secure the
+terminal. A device admin cannot block its own uninstallation, cannot stop the user
+clearing its data, and cannot enable true LockTask. Android only honours those when an
+app is the **device owner**. Until that is done, "Kiosk Mode" on the Security tab runs in
+reduced screen-pinning mode, which any user can dismiss with **Back + Overview**.
+
+StorePoint now detects this and tells you - the Security tab shows a warning and a toast
+appears when lockdown is entered in reduced mode. But it can only *report* the state; the
+provisioning itself must be done once, on the terminal, by someone with ADB access.
+
+#### Prerequisites
+
+- A freshly reset / factory-fresh tablet (device owner can only be set with **no accounts
+  on the device** - no Google account, no other apps signed in).
+- USB debugging enabled (Settings > About > tap Build number 7x, then Developer options).
+- ADB installed on your computer.
+
+#### Steps
+
+```bash
+# 1. Install StorePoint while the device is still freshly reset
+adb install StorePoint-v1.0.1.4.apk
+
+# 2. Make StorePoint the device owner.
+#    The receiver must be the only admin on a device with no accounts.
+adb shell dpm set-device-owner com.munzo.storepoint/.StorePointDeviceAdminReceiver
+
+# 3. Verify - must report "Device owner: com.munzo.storepoint"
+adb shell dpm list-owners
+```
+
+#### Verify on the device
+
+Open **Admin Dashboard > Security**. The status must read **`FULL TERMINAL LOCKDOWN`**.
+Only then does activating Kiosk Mode produce real, non-dismissable lockdown.
+
+#### Troubleshooting
+
+```bash
+# "Not allowed to set the device owner because there are already several users on the device"
+# -> you must factory-reset the tablet, then provision BEFORE adding any Google account.
+
+# "Trying to set the device owner, but device owner is already set"
+adb shell dpm list-owners
+adb shell dpm remove-active-admin com.munzo.storepoint/.StorePointDeviceAdminReceiver
+# then re-run step 2 on a factory-fresh device
+
+# Check the restrictions actually took effect
+adb shell dpm list-user-restrictions
+# expect DISALLOW_APPS_CONTROL and DISALLOW_UNINSTALL_APPS to be present
 ```

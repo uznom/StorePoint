@@ -1,6 +1,7 @@
 package com.munzo.storepoint
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -115,6 +116,11 @@ class MainActivity : FragmentActivity() {
                     val isKioskActive by viewModel.isKioskModeActive.collectAsState()
                     val isAlwaysOnEnabled by viewModel.isAlwaysOnEnabled.collectAsState()
                     var wasKioskActive by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                    // SECURITY (issue #4): true when lockdown is NOT genuinely enforced
+                    // (terminal is not provisioned as device owner, or the policy calls
+                    // failed). Drives the REDUCED-mode warning so a cash register is never
+                    // presented as secured when it is only screen-pinned.
+                    var degradedKioskLockdown by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
                     // --- Predictive back gesture ---
                     // Predictive back is enabled app-wide through
@@ -218,18 +224,42 @@ class MainActivity : FragmentActivity() {
                                         }
                                         android.util.Log.d("MainActivity", "Kiosk: Whitelisting for True Lock Task Mode configured.")
                                     } else {
-                                        android.util.Log.d("MainActivity", "Kiosk: Not device owner, falling back to screen pinning behavior.")
+                                        // SECURITY (issue #4): the previous branch was a bare
+                                        // Log.d and lockdown proceeded anyway, so the owner was
+                                        // told "System entered secure Kiosk lockdown" while the
+                                        // terminal was in dismissable screen-pinning mode. Now
+                                        // surface it and record the degraded state.
+                                        android.util.Log.w(
+                                            "MainActivity",
+                                            "Kiosk: NOT device owner - lockdown runs as dismissable screen pinning."
+                                        )
+                                        degradedKioskLockdown = true
                                     }
+                                } else {
+                                    degradedKioskLockdown = true
                                 }
                             } catch (e: Throwable) {
                                 android.util.Log.e("MainActivity", "Failed setting LOCK_TASK_FEATURE_NONE or setLockTaskPackages", e)
+                                degradedKioskLockdown = true
                             }
 
                             try {
                                 startLockTask()
                                 wasKioskActive = true
+                                if (degradedKioskLockdown) {
+                                    // Fail loudly rather than let the owner believe a cash
+                                    // register is secured when it is not.
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Kiosk entered in REDUCED mode: this terminal is not provisioned as " +
+                                            "device owner, so lockdown is dismissable screen pinning only. " +
+                                            "See Admin > Security.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
                             } catch (e: Throwable) {
                                 android.util.Log.e("MainActivity", "LockTask start failed: falling back to basic Compose suppression", e)
+                                degradedKioskLockdown = true
                             }
                         } else {
                             val am = getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager

@@ -38,6 +38,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.viewModelScope
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.munzo.storepoint.KioskLockdownCapability
+import com.munzo.storepoint.LockdownStrength
 import com.munzo.storepoint.StorePointDeviceAdminReceiver
 import com.munzo.storepoint.data.*
 import com.munzo.storepoint.ui.StorePointViewModel
@@ -61,6 +63,17 @@ fun SecurityTab(viewModel: StorePointViewModel) {
     val dpm = remember { context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager }
     val adminName = remember { ComponentName(context, com.munzo.storepoint.StorePointDeviceAdminReceiver::class.java) }
     var isAdminActive by remember { mutableStateOf(dpm.isAdminActive(adminName)) }
+    // SECURITY (issue #4): report what is actually ENFORCED, not merely whether device
+    // admin is switched on. These are very different states on a cash register.
+    var lockdownStrength by remember {
+        mutableStateOf(KioskLockdownCapability.current(context))
+    }
+
+    /** Re-reads both device-admin and device-owner state from the system. */
+    fun refreshLockdownStatus() {
+        isAdminActive = dpm.isAdminActive(adminName)
+        lockdownStrength = KioskLockdownCapability.current(context)
+    }
 
     // Device admin consent is granted in a system screen, so re-read the real status as soon as
     // the user comes back. Without this the status card stayed stale ("PROTECTION DEACTIVATED")
@@ -68,14 +81,14 @@ fun SecurityTab(viewModel: StorePointViewModel) {
     val deviceAdminLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        isAdminActive = dpm.isAdminActive(adminName)
+        refreshLockdownStatus()
     }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                isAdminActive = dpm.isAdminActive(adminName)
+                refreshLockdownStatus()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1428,31 +1441,63 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
-                        imageVector = if (isAdminActive) Icons.Default.Security else Icons.Default.Warning,
+                        // SECURITY (issue #4): the icon and colour now follow real
+                        // enforcement, not merely whether device admin is switched on.
+                        imageVector = when (lockdownStrength) {
+                            LockdownStrength.DeviceOwnerEnforced -> Icons.Default.Security
+                            LockdownStrength.ScreenPinningOnly -> Icons.Default.Warning
+                            LockdownStrength.Unprotected -> Icons.Default.Warning
+                        },
                         contentDescription = "Status",
-                        tint = if (isAdminActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        tint = when (lockdownStrength) {
+                            LockdownStrength.DeviceOwnerEnforced -> MaterialTheme.colorScheme.primary
+                            LockdownStrength.ScreenPinningOnly -> MaterialTheme.colorScheme.tertiary
+                            LockdownStrength.Unprotected -> MaterialTheme.colorScheme.error
+                        },
                         modifier = Modifier.size(32.dp)
                     )
                     Column {
                         Text(
-                            text = if (isAdminActive) "DEVICE PROTECTION ON" else "DEVICE PROTECTION OFF",
+                            // Previously derived from isAdminActive alone, which reported
+                            // "DEVICE PROTECTION ON" for a terminal that could not enforce
+                            // anything. Now states what is actually enforced.
+                            text = KioskLockdownCapability.label(lockdownStrength),
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (isAdminActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            color = when (lockdownStrength) {
+                                LockdownStrength.DeviceOwnerEnforced -> MaterialTheme.colorScheme.primary
+                                LockdownStrength.ScreenPinningOnly -> MaterialTheme.colorScheme.tertiary
+                                LockdownStrength.Unprotected -> MaterialTheme.colorScheme.error
+                            }
                         )
                         Text(
-                            text = "Device Administrator status",
+                            text = "Terminal enforcement status",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
                 }
 
+                // Warn specifically about the admin-but-not-owner case, which is the
+                // one that previously looked healthy on screen.
+                if (lockdownStrength == LockdownStrength.ScreenPinningOnly) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Device Administrator is ON but this terminal is NOT provisioned as " +
+                                "device owner. Kiosk lockdown is screen pinning only.",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
                 Text(
-                    text = if (isAdminActive) {
-                        "Device Administrator is active. StorePoint can lock or erase this device if the terminal is lost or stolen. Uninstalling the app is still permitted through Android settings."
-                    } else {
-                        "Device Administrator is off. StorePoint cannot lock or erase this device remotely if it is lost or stolen. Enable it to turn on terminal protection."
-                    },
+                    text = KioskLockdownCapability.explanation(lockdownStrength),
                     style = MaterialTheme.typography.bodyMedium
                 )
 
@@ -1490,7 +1535,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         )
                         TextButton(
                             onClick = {
-                                isAdminActive = dpm.isAdminActive(adminName)
+                                refreshLockdownStatus()
                             }
                         ) {
                             Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
