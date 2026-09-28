@@ -36,7 +36,7 @@ StorePoint is an offline-first Point of Sale (POS) and inventory tracking applic
 - `MIGRATION_13_14` adds `biometricEnrolled` and `pinResetRequired`, marking every pre-existing account as needing a reset.
 - `login()` **refuses** accounts flagged `pinResetRequired`.
 - `PinResetScreen` is a 3-step chunked wizard: verify the existing credential → choose → confirm. Step 1 requires the *current* PIN, so the screen cannot be used to hijack another account.
-- `SecurityHelper.verifyPinLenient` accepts 4 or 6 digits and is used **only** by the reset gate and kiosk unlock — the latter so an un-migrated admin can still exit kiosk lockdown.
+- `SecurityHelper.verifyPinLenient` accepts 4 or 6 digits and is used **only** by the reset gate and the ADMIN-PIN path out of kiosk lockdown — the latter so an un-migrated admin can still exit lockdown. The dedicated kiosk PIN is verified separately via `verifyKioskPinUnlock()`, which is rate-limited under its own budget. See [Terminal Lockdown & Kiosk Security](#terminal-lockdown--kiosk-security).
 
 ---
 
@@ -159,6 +159,75 @@ The migration is purely additive and fail-closed: no blanket `try/catch`, so a g
    Any failure rolls the entire sale back.
 
 ---
+
+## Terminal Lockdown & Kiosk Security
+
+Kiosk mode is the app's tamper control for a cash register. It is reported through a single
+source of truth, `KioskLockdownCapability`, which classifies the terminal into one of three
+states. These are **not** interchangeable, and conflating them was a real defect:
+
+| Status | Precondition | Reality |
+|---|---|---|
+| `FULL TERMINAL LOCKDOWN` | StorePoint is the **device owner** | `startLockTask()` engages true, non-dismissable LockTask; uninstall blocking, app-control restrictions and the lock-task allowlist all apply. |
+| `REDUCED - SCREEN PINNING ONLY` | Device **admin** only | `startLockTask()` degrades to legacy screen pinning, dismissable with Back + Overview. Every device-owner-only restriction is silently skipped. |
+| `PROTECTION OFF` | Nothing active | Nothing is enforced. |
+
+Device admin alone is **not** sufficient - a device admin cannot block its own uninstallation
+or enable true LockTask. When a terminal is only administered, the Security tab shows a warning
+and entering lockdown raises a toast, because a cash register must never *look* secured when
+it is not. Provisioning is a one-time per-terminal step requiring ADB; see `docs/USER_GUIDE.md`.
+
+### Lock-task Ownership
+
+Lock-task has exactly **one** owner: `MainActivity.syncKioskLockTask()`. It is driven from the
+Activity (not a Compose effect) so the transition survives configuration change and process
+recreation, and `onResume` reconciles against the real `ActivityManager.lockTaskModeState`
+rather than the app's own belief. `MainActivity.lockTaskEngaged` holds the app-side state;
+the OS state is the source of truth.
+
+Re-assertion (`reassertKioskLock()`) is debounced to 1.5s and is a no-op when the OS still has
+the app locked, so ordinary focus churn cannot stack into repeated activity relaunches.
+Home / app-switcher suppression was removed: those key events are not delivered to apps on
+modern Android, so the handlers were unreachable.
+
+### Unlock Credentials & Rate Limiting
+
+There are **two** ways to leave lockdown, and they charge **separate** failure budgets:
+
+1. **The kiosk PIN** - a dedicated credential, verified by `verifyKioskPinUnlock()`.
+2. **An ADMIN account PIN** - verified by `verifyKioskUnlock()`, using `verifyPinLenient` so an
+   admin who has not yet completed the 4-digit migration can still exit (otherwise the
+   migration would become a way to permanently lock a terminal into kiosk mode).
+
+Budgets are keyed per action. Exiting lockdown and toggling the Wi-Fi/Bluetooth radio pills
+are charged independently, so fumbling a radio toggle cannot lock an admin out of unlocking
+the register, and probing the admin PIN cannot lock the radios out.
+
+The kiosk PIN is held to the **same strength policy as every account PIN** - exactly
+`PIN_LENGTH` digits, refusing repeats, ascending/descending runs and keyboard walks
+(`SecurityHelper.isWeakPin`). It is the app's highest-value credential, so it must not be the
+weakest one. `setKioskPin()` enforces this centrally and fails closed on a blank or short
+value rather than silently storing an empty hash.
+
+Both paths use `KioskLockdownPolicy`: a burst allowance, then an escalating
+30s -> 60s -> 120s -> 300s window, capped so the penalty cannot be grown without bound. The
+lockout is consulted **before** verification, so a correct PIN is still refused while a window
+is active.
+
+### Release Lockdown
+
+Releasing lockdown always requires a verified credential - there is no fail-open path. If no
+kiosk PIN is configured, release requires an ADMIN account PIN, which is also the documented
+recovery path for a forgotten kiosk PIN.
+
+### PIN Entry
+
+PINs are entered with an on-screen numeric keypad (`PinPadEntry`), not the system IME. The
+IME covers roughly half a POS screen, hiding the cart and the sign-in context, and it is a
+shoulder-surfing surface on a shared register. `ExpressiveOtpPinInput(enableSoftKeyboard =
+false)` makes the field read-only so the keypad is the sole input path, which also keeps it
+invisible to IME auto-fill. `KeyboardType.None` is unavailable on this Compose version, so
+suppression relies on `readOnly` plus a non-focusable wrapper.
 
 ## Adaptive UI & Window Layout
 
