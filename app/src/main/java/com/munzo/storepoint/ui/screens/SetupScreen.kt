@@ -34,6 +34,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.munzo.storepoint.StorePointDeviceAdminReceiver
 import com.munzo.storepoint.util.DatabaseBackupManager
 import com.munzo.storepoint.ui.theme.ExpressiveOtpPinInput
+import com.munzo.storepoint.util.SecurityHelper
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -778,26 +779,38 @@ fun SetupScreen(viewModel: StorePointViewModel) {
 
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = "Admin 6-Digit PIN",
+                                text = "Admin ${SecurityHelper.PIN_LENGTH}-Digit PIN",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(8.dp))
+                            val adminPinWeak = adminPassword.isNotEmpty() && SecurityHelper.isWeakPin(adminPassword)
                             ExpressiveOtpPinInput(
                                 pin = adminPassword,
                                 onPinChange = { adminPassword = it },
-                                pinLength = 6,
+                                pinLength = SecurityHelper.PIN_LENGTH,
                                 isMasked = true,
+                                isError = adminPinWeak,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("admin_password_input")
                             )
                             Spacer(modifier = Modifier.height(4.dp))
+                            // The first admin PIN is the root of trust for the whole
+                            // terminal, so the weak-PIN policy is surfaced immediately.
                             Text(
-                                text = if (adminPassword.length == 6) "✓ 6-digit security PIN ready" else "${adminPassword.length}/6 digits (numeric only)",
+                                text = when {
+                                    adminPinWeak -> "Too easy to guess — ${SecurityHelper.pinPolicyHint()}"
+                                    adminPassword.length == SecurityHelper.PIN_LENGTH -> "✓ PIN ready"
+                                    else -> "${adminPassword.length}/${SecurityHelper.PIN_LENGTH} digits (numeric only)"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (adminPassword.length == 6) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                color = when {
+                                    adminPinWeak -> MaterialTheme.colorScheme.error
+                                    adminPassword.length == SecurityHelper.PIN_LENGTH -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.outline
+                                }
                             )
                         }
                     }
@@ -850,7 +863,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                 } catch (_: Exception) {}
                                 return@Button
                             }
-                            if (adminUsername.isNotBlank() && adminPassword.length == 6) {
+                            if (adminUsername.isNotBlank() && SecurityHelper.isValidPin(adminPassword)) {
                                 viewModel.completeInitialSetup(
                                     storeName = storeName.trim(),
                                     currency = currencySymbol,
@@ -882,7 +895,10 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                         storeName.isNotBlank() && taxPercentageStr.toDoubleOrNull() != null
                     } else {
                         storeName.isNotBlank() && taxPercentageStr.toDoubleOrNull() != null &&
-                        adminUsername.isNotBlank() && adminPassword.length == 6 && isDeviceAdminActive
+                        adminUsername.isNotBlank() &&
+                        SecurityHelper.isValidPin(adminPassword) &&
+                        !SecurityHelper.isWeakPin(adminPassword) &&
+                        isDeviceAdminActive
                     }
                 ) {
                     Text(

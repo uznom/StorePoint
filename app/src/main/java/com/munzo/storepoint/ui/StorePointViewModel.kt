@@ -13,6 +13,7 @@ import com.munzo.storepoint.util.CrashDiagnosticsManager
 import com.munzo.storepoint.util.DatabaseBackupManager
 import com.munzo.storepoint.util.EscPosHelper
 import com.munzo.storepoint.util.SecurityHelper
+import com.munzo.storepoint.util.SessionStateCache
 import com.munzo.storepoint.util.UpdateDownloadState
 import java.io.File
 import kotlinx.coroutines.flow.*
@@ -168,7 +169,7 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
      * accepted there until they are upgraded on next login). The previous implementation's
      * `pinHash == candidatePin` plaintext shortcut and blank/no-admin `return true` paths are
      * removed. Repeated failures trigger a 60-second lockout to slow brute-force of the
-     * 6-digit PIN space.
+     * PIN space.
      */
     suspend fun verifyAdminPin(candidatePin: String): Boolean {
         if (candidatePin.isBlank()) return false
@@ -209,6 +210,88 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     // Selected UOM per product inside the cart
     internal val _selectedCartUoms = MutableStateFlow<Map<Int, UomOption>>(emptyMap())
     val selectedCartUoms: StateFlow<Map<Int, UomOption>> = _selectedCartUoms.asStateFlow()
+
+    /**
+     * Session/UI state cache (cart draft, last payment method, last tabs).
+     *
+     * The cart draft is mirrored to disk on every mutation so an interrupted sale
+     * survives a crash or a kiosk reboot. Restoration re-resolves product ids against
+     * the live catalogue so stale prices and stock levels are never resurrected.
+     */
+    val sessionCache = SessionStateCache(context)
+
+    init {
+        // Mirror every cart/UOM change to the draft. Debounced is unnecessary here:
+        // the write is a tiny SharedPreferences `apply()` (async, in-memory commit),
+        // not a disk sync.
+        viewModelScope.launch {
+            combine(_cartMap, _selectedCartUoms) { cart, uoms -> cart to uoms }
+                .collect { (cart, uoms) -> sessionCache.saveCartDraft(cart, uoms) }
+        }
+    }
+
+    /**
+     * Re-populates the cart from the persisted draft.
+     *
+     * Called after authentication. Lines whose product no longer exists, or whose
+     * quantity now exceeds available stock, are dropped rather than restored at an
+     * invalid value — a silently-wrong basket is worse than a missing line.
+     */
+    fun restoreCartDraft() {
+        viewModelScope.launch {
+            val draft = sessionCache.loadCartDraft() ?: return@launch
+            val catalogue = allProducts.value.associateBy { it.id }
+            if (catalogue.isEmpty()) return@launch
+
+            val restoredCart = mutableMapOf<Int, Pair<Product, Int>>()
+            val restoredUoms = mutableMapOf<Int, UomOption>()
+            var dropped = 0
+
+            draft.forEach { line ->
+                val product = catalogue[line.productId]
+                if (product == null) {
+                    dropped++
+                    return@forEach
+                }
+                val uom = line.uomName?.let { name ->
+                    UomOption(name, line.uomMultiplier.coerceAtLeast(1), line.uomPrice)
+                }
+                // Respect the same stock ceiling the live add-to-cart path enforces.
+                val effective = line.quantity * (uom?.multiplier ?: 1)
+                if (line.quantity <= 0 || effective > product.stockCount) {
+                    dropped++
+                    return@forEach
+                }
+                restoredCart[product.id] = Pair(product, line.quantity)
+                if (uom != null) restoredUoms[product.id] = uom
+            }
+
+            if (restoredCart.isNotEmpty()) {
+                _cartMap.value = restoredCart
+                _selectedCartUoms.value = restoredUoms
+            }
+            if (dropped > 0) {
+                android.util.Log.i("StorePointViewModel", "Cart restore dropped $dropped unavailable line(s)")
+            }
+            // Reflect the outcome so the POS screen can acknowledge the restore.
+            restoredCartLineCount = restoredCart.size
+        }
+    }
+
+    /**
+     * Number of lines recovered by the most recent [restoreCartDraft] call.
+     *
+     * Exposed to the POS screen so it can show a "Restored your basket" notice.
+     */
+    var restoredCartLineCount: Int = 0
+        internal set
+
+    /** Clears the "basket restored" acknowledgement once the POS screen has shown it. */
+    fun acknowledgeCartRestore() {
+        restoredCartLineCount = 0
+        sessionCache.didRestoreCart = false
+    }
+
 
     fun getDrawerPayoutsInActiveSession(): Double {
         val session = activeSession.value ?: return 0.0
@@ -304,8 +387,16 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     ) {
         viewModelScope.launch {
             val hashedPass = hashPin(adminPass)
-            // Save admin credentials
-            val user = User(username = adminUser, pinHash = hashedPass, role = "ADMIN")
+            // Save admin credentials. `pinResetRequired = false` because this account
+            // is created now under the 4-digit standard — it must not be routed
+            // through the legacy-credential migration wizard.
+            val user = User(
+                username = adminUser,
+                pinHash = hashedPass,
+                role = "ADMIN",
+                biometricEnrolled = false,
+                pinResetRequired = false
+            )
             repository.saveUser(user)
 
             // Save admin contact details in preferences
@@ -541,6 +632,8 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         prefs.edit().putString("last_logged_in_user", user.username).apply()
         lastLoggedInUser.value = user.username
         playBeep()
+        // Rehydrate any basket that survived a crash or a shift change.
+        restoreCartDraft()
         onSuccess(user)
     }
 
@@ -566,6 +659,14 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Authorizes leaving kiosk lockdown or a protected admin action.
+     *
+     * Uses [SecurityHelper.verifyPinLenient] so an admin who has not yet completed the
+     * 4-digit migration can still exit kiosk lockdown — otherwise the migration would
+     * become a way to permanently lock a terminal into kiosk mode. This path stays
+     * rate-limited below and matches every admin account.
+     */
     fun verifyKioskUnlock(pin: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -583,7 +684,7 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
             var isValid = false
             if (pin.isNotBlank()) {
                 for (admin in admins) {
-                    val verification = SecurityHelper.verifyPin(pin, admin.passwordHash)
+                    val verification = SecurityHelper.verifyPinLenient(pin, admin.passwordHash)
                     if (verification.isMatch) {
                         isValid = true
                         if (verification.needsUpgrade) {
@@ -644,10 +745,20 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Ends the cashier session.
+     *
+     * The cart is intentionally *not* cleared here. Under the Zeigarnik Effect an
+     * in-progress basket is the thing the user most wants back; a shift change or a
+     * kiosk lock should not silently destroy it. The draft continues to be mirrored to
+     * disk by the autosave above, so the next sign-in restores it. Callers who genuinely
+     * want to discard the basket (successful checkout, explicit "clear cart") already do
+     * so through their own code paths.
+     */
     fun logout() {
         activeUser.value = null
         CrashDiagnosticsManager.currentCashier = "None"
-        clearCart()
+        restoredCartLineCount = 0
     }
 
     // --- Shift Session Management ---

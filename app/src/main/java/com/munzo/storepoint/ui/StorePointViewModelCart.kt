@@ -77,6 +77,10 @@ internal fun StorePointViewModel.cartRemoveFromCartImpl(product: Product) {
 internal fun StorePointViewModel.cartClearCartImpl() {
     _cartMap.value = emptyMap()
     _selectedCartUoms.value = emptyMap()
+    // An explicit clear discards the draft too, otherwise the autosave collector would
+    // immediately re-persist the now-empty map as a "restorable" (but empty) basket.
+    sessionCache.clearCartDraft()
+    restoredCartLineCount = 0
 }
 
 internal fun StorePointViewModel.cartHandleBarcodeScanImpl(barcode: String, quantity: Int = 1) {

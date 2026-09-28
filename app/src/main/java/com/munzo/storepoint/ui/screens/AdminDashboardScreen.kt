@@ -55,6 +55,7 @@ import com.munzo.storepoint.util.BiometricAuthHelper
 import com.munzo.storepoint.util.CrashDiagnosticsManager
 import com.munzo.storepoint.util.DatabaseBackupManager
 import com.munzo.storepoint.util.EscPosHelper
+import com.munzo.storepoint.util.SecurityHelper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import java.text.SimpleDateFormat
@@ -523,16 +524,34 @@ fun AdminDashboardScreen(
                                     Toast.makeText(context, "Username cannot be empty.", Toast.LENGTH_SHORT).show()
                                     return@ExpressiveButton
                                 }
-                                if (editingUser == null && inputPin.length != 6) {
-                                    Toast.makeText(context, "A full 6-digit security PIN is required.", Toast.LENGTH_SHORT).show()
+                                if (editingUser == null && !SecurityHelper.isValidPin(inputPin)) {
+                                    Toast.makeText(context, "A full ${SecurityHelper.PIN_LENGTH}-digit security PIN is required.", Toast.LENGTH_SHORT).show()
                                     return@ExpressiveButton
                                 }
-                                if (editingUser != null && inputPin.isNotEmpty() && inputPin.length != 6) {
-                                    Toast.makeText(context, "PIN must be exactly 6 digits.", Toast.LENGTH_SHORT).show()
+                                if (inputPin.isNotEmpty() && !SecurityHelper.isValidPin(inputPin)) {
+                                    Toast.makeText(context, "PIN must be exactly ${SecurityHelper.PIN_LENGTH} digits.", Toast.LENGTH_SHORT).show()
+                                    return@ExpressiveButton
+                                }
+                                // Enforce the same weak-PIN policy the self-service
+                                // reset wizard applies, so an admin cannot create a
+                                // credential the user would be refused elsewhere.
+                                if (inputPin.isNotEmpty() && SecurityHelper.isWeakPin(inputPin)) {
+                                    Toast.makeText(context, "That PIN is too easy to guess. ${SecurityHelper.pinPolicyHint()}", Toast.LENGTH_LONG).show()
                                     return@ExpressiveButton
                                 }
 
-                                viewModel.saveUser(User(inputUsername.trim(), pinToSave, inputRole, inputBarcodeId.trim()))
+                                // Hash here rather than storing a plaintext PIN, and
+                                // clear the migration flag so a newly created account
+                                // is immediately usable without the reset wizard.
+                                val toSave = User(
+                                    username = inputUsername.trim(),
+                                    pinHash = if (inputPin.isNotEmpty()) SecurityHelper.hashPin(inputPin) else pinToSave,
+                                    role = inputRole,
+                                    barcodeId = inputBarcodeId.trim(),
+                                    biometricEnrolled = editingUser?.biometricEnrolled ?: false,
+                                    pinResetRequired = false
+                                )
+                                viewModel.saveUser(toSave)
                                 showUserDialog = false
                                 if (inputRole == "INVENTORY") {
                                     Toast.makeText(context, "Inventory audit account successfully registered & certified!", Toast.LENGTH_SHORT).show()
@@ -582,24 +601,39 @@ fun AdminDashboardScreen(
 
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = if (editingUser != null) "New 6-Digit PIN (Leave blank to keep)" else "6-Digit Security PIN",
+                                text = if (editingUser != null)
+                                    "New ${SecurityHelper.PIN_LENGTH}-Digit PIN (Leave blank to keep)"
+                                else
+                                    "${SecurityHelper.PIN_LENGTH}-Digit Security PIN",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(8.dp))
+                            val pinIsWeak = inputPin.isNotEmpty() && SecurityHelper.isWeakPin(inputPin)
                             ExpressiveOtpPinInput(
                                 pin = inputPin,
                                 onPinChange = { inputPin = it },
-                                pinLength = 6,
+                                pinLength = SecurityHelper.PIN_LENGTH,
                                 isMasked = true,
+                                isError = pinIsWeak,
                                 modifier = Modifier.fillMaxWidth().testTag("staff_password_input")
                             )
                             Spacer(modifier = Modifier.height(4.dp))
+                            // Live feedback: tell the staff manager the PIN is weak while
+                            // they can still change it, rather than rejecting on submit.
                             Text(
-                                text = if (inputPin.length == 6) "✓ 6-digit PIN ready" else "${inputPin.length}/6 digits",
+                                text = when {
+                                    pinIsWeak -> "Too easy to guess — ${SecurityHelper.pinPolicyHint()}"
+                                    inputPin.length == SecurityHelper.PIN_LENGTH -> "✓ PIN ready"
+                                    else -> "${inputPin.length}/${SecurityHelper.PIN_LENGTH} digits"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (inputPin.length == 6) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                color = when {
+                                    pinIsWeak -> MaterialTheme.colorScheme.error
+                                    inputPin.length == SecurityHelper.PIN_LENGTH -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.outline
+                                }
                             )
                         }
 

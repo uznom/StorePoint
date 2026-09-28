@@ -72,7 +72,10 @@ object SecurityHelper {
         pin.zipWithNext().all { (a, b) -> a - b == 1 }
 
     /**
-     * Generates a salted PBKDF2-HMAC-SHA256 hash for a 6-digit PIN.
+     * Generates a salted PBKDF2-HMAC-SHA256 hash for a numeric PIN.
+     *
+     * Length-agnostic on purpose: it is used for both the current 4-digit PIN and the
+     * legacy 6-digit credential during the migration window.
      */
     fun hashPin(pin: String): String = hashPassword(pin)
 

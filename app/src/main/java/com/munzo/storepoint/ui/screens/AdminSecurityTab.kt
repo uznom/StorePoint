@@ -1662,7 +1662,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             title = { Text("Validate Administrative Authority", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Warning! This deletes all transaction items, users, and catalog sets. Retriggering the system setup sequence. Enter your Admin 6-Digit PIN to proceed:")
+                    Text("Warning! This deletes all transaction items, users, and catalog sets. Retriggering the system setup sequence. Enter your Admin 4-Digit PIN to proceed:")
                     Spacer(Modifier.height(4.dp))
                     ExpressiveOtpPinInput(
                         pin = adminWipePasswordInput,
@@ -1724,7 +1724,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "You are importing inventory data (.spinventory package / catalog). Enter your Admin 6-Digit PIN to certify and merge this into the active store catalog:",
+                        text = "You are importing inventory data (.spinventory package / catalog). Enter your Admin 4-Digit PIN to certify and merge this into the active store catalog:",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(4.dp))
@@ -1974,7 +1974,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         singleLine = true
                     )
                     Text(
-                        "Full restore overwrites store data. Enter your Admin 6-Digit PIN to authorize:",
+                        "Full restore overwrites store data. Enter your Admin 4-Digit PIN to authorize:",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -1986,7 +1986,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                                 restoreAdminPinError = ""
                             }
                         },
-                        label = { Text("Admin 6-Digit PIN") },
+                        label = { Text("Admin 4-Digit PIN") },
                         isError = restoreAdminPinError.isNotEmpty(),
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),

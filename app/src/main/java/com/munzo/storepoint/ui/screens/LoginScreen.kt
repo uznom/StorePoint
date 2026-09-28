@@ -109,7 +109,7 @@ fun LoginScreen(
                     modifier = Modifier.imePadding(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Enter the Admin 6-Digit PIN to immediately stop Lock Task Mode and return to normal operation.")
+                    Text("Enter the Admin 4-Digit PIN to immediately stop Lock Task Mode and return to normal operation.")
                     Spacer(Modifier.height(4.dp))
                     ExpressiveOtpPinInput(
                         pin = logoUnlockInput,

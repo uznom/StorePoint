@@ -184,18 +184,22 @@ internal fun StorePointViewModel.backupClearAllDatabaseDataImpl(adminPass: Strin
                 
                 // Clear all shared preferences
                 prefs.edit().clear().apply()
+                // The session cache lives in its own preference file, so the wipe above
+                // does not reach it. A "wipe everything" must not leave a stale cart
+                // draft behind that could reappear on the next sign-in.
+                sessionCache.clearAll()
                 isAlwaysOnEnabled.value = false
                 kioskPin.value = ""
                 isOnboardingCompleted.value = false
                 isKioskModeActive.value = false
-                
+
                 // Reset ViewModel session/user state
                 activeUser.value = null
                 clearCart()
-                
+
                 onSuccess()
             } else {
-                onFailure("Invalid admin 6-digit PIN.")
+                onFailure("Invalid admin ${SecurityHelper.PIN_LENGTH}-digit PIN.")
             }
         } catch (e: Exception) {
             android.util.Log.e("StorePointViewModel", "Error wiping data", e)

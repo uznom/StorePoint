@@ -947,7 +947,7 @@ private fun InventoryQuickShareHubTab(
                 Column {
                     Text("Admin Import Control", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                     Text(
-                        "On the receiving terminal, this data is imported under Admin Center → Security → Import Inventory Data, certified by Admin 6-digit PIN.",
+                        "On the receiving terminal, this data is imported under Admin Center → Security → Import Inventory Data, certified by Admin 4-digit PIN.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )

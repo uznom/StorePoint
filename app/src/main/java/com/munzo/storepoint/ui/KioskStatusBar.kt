@@ -10,6 +10,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import com.munzo.storepoint.util.SecurityHelper
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -233,7 +234,7 @@ fun KioskStatusBar(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Modifying $targetActionName is restricted to terminal administrators. Enter the 6-Digit Admin PIN to proceed.",
+                        text = "Modifying $targetActionName is restricted to terminal administrators. Enter the ${SecurityHelper.PIN_LENGTH}-Digit Admin PIN to proceed.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(4.dp))
@@ -243,7 +244,10 @@ fun KioskStatusBar(
                             adminAuthPin = it
                             adminAuthError = ""
                         },
-                        pinLength = 6,
+                        // Accepts the legacy 6-digit pad on purpose: an admin who has not
+                        // yet completed the 4-digit migration must still be able to exit
+                        // kiosk lockdown. Verification is correspondingly lenient.
+                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = adminAuthError.isNotEmpty(),
                         errorMessage = adminAuthError,
@@ -308,7 +312,7 @@ fun KioskStatusBar(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Enter the Admin 6-Digit PIN to immediately stop Lock Task Mode and return to normal operation.",
+                        "Enter the Admin ${SecurityHelper.PIN_LENGTH}-Digit PIN to immediately stop Lock Task Mode and return to normal operation.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(4.dp))
@@ -318,7 +322,7 @@ fun KioskStatusBar(
                             unlockInput = it
                             unlockError = ""
                         },
-                        pinLength = 6,
+                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = unlockError.isNotEmpty(),
                         errorMessage = unlockError,
