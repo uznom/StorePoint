@@ -4,9 +4,17 @@ import androidx.lifecycle.viewModelScope
 import com.munzo.storepoint.data.Transaction
 import com.munzo.storepoint.data.TransactionItem
 import com.munzo.storepoint.util.EscPosHelper
+import com.munzo.storepoint.util.UsbPrinterHelper
 import kotlinx.coroutines.launch
 
-internal fun StorePointViewModel.hardwareUpdatePrinterSettingsImpl(type: String, ip: String, port: Int, btMac: String, autoKick: Boolean, is80mm: Boolean) {
+internal fun StorePointViewModel.hardwareUpdatePrinterSettingsImpl(
+    type: String,
+    ip: String,
+    port: Int,
+    btMac: String,
+    autoKick: Boolean,
+    is80mm: Boolean
+) {
     prefs.edit()
         .putString("printer_type", type)
         .putString("printer_ip", ip)
@@ -35,8 +43,39 @@ internal fun StorePointViewModel.hardwareSetPrinterBluetoothMacImpl(mac: String)
     hardwareUpdatePrinterSettingsImpl(printerType.value, printerIpAddress.value, printerPort.value, mac, isAutoKickDrawerEnabled.value, is80mmThermal.value)
 }
 
+internal fun StorePointViewModel.hardwareSetPrinterBluetoothConfigImpl(mac: String, name: String) {
+    prefs.edit()
+        .putString("printer_type", EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name)
+        .putString("printer_bt_mac", mac)
+        .putString("printer_device_name", name)
+        .apply()
+    printerType.value = EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name
+    printerBtMac.value = mac
+    printerDeviceName.value = name
+}
+
+internal fun StorePointViewModel.hardwareSetPrinterUsbConfigImpl(identifier: String, name: String) {
+    prefs.edit()
+        .putString("printer_type", EscPosHelper.PrinterType.USB_ESCPOS.name)
+        .putString("printer_usb_id", identifier)
+        .putString("printer_device_name", name)
+        .apply()
+    printerType.value = EscPosHelper.PrinterType.USB_ESCPOS.name
+    printerUsbIdentifier.value = identifier
+    printerDeviceName.value = name
+}
+
+internal fun StorePointViewModel.hardwareSetPrinterAutoCutterImpl(hasCutter: Boolean) {
+    prefs.edit().putBoolean("printer_has_cutter", hasCutter).apply()
+    printerHasAutoCutter.value = hasCutter
+}
+
 internal fun StorePointViewModel.hardwareSetPaperWidth80mmImpl(is80: Boolean) {
     hardwareUpdatePrinterSettingsImpl(printerType.value, printerIpAddress.value, printerPort.value, printerBtMac.value, isAutoKickDrawerEnabled.value, is80)
+    // By default, 80mm printers typically have auto-cutters, while 58mm XP-58 Plus use manual tear bars
+    if (!is80) {
+        hardwareSetPrinterAutoCutterImpl(false)
+    }
 }
 
 internal fun StorePointViewModel.hardwareSetAutoKickDrawerEnabledImpl(enabled: Boolean) {
@@ -45,7 +84,11 @@ internal fun StorePointViewModel.hardwareSetAutoKickDrawerEnabledImpl(enabled: B
 
 internal fun StorePointViewModel.hardwareTestPrinterImpl(onResult: (Boolean, String) -> Unit) {
     viewModelScope.launch {
-        val testBytes = EscPosHelper.buildTestTicket(is80mm = is80mmThermal.value, kickDrawer = isAutoKickDrawerEnabled.value)
+        val testBytes = EscPosHelper.buildTestTicket(
+            is80mm = is80mmThermal.value,
+            kickDrawer = isAutoKickDrawerEnabled.value,
+            hasAutoCutter = printerHasAutoCutter.value
+        )
         when (printerType.value) {
             EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
                 val res = EscPosHelper.printOverNetwork(printerIpAddress.value, printerPort.value, testBytes)
@@ -57,8 +100,15 @@ internal fun StorePointViewModel.hardwareTestPrinterImpl(onResult: (Boolean, Str
             EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name -> {
                 val res = EscPosHelper.printOverBluetooth(printerBtMac.value, testBytes)
                 res.fold(
-                    onSuccess = { onResult(true, "Test ticket printed successfully (Bluetooth).") },
+                    onSuccess = { onResult(true, "Test ticket printed successfully (Bluetooth XP-58/Thermal).") },
                     onFailure = { onResult(false, "Bluetooth test failed: ${it.localizedMessage}") }
+                )
+            }
+            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
+                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, testBytes)
+                res.fold(
+                    onSuccess = { onResult(true, "Test ticket printed successfully (USB OTG).") },
+                    onFailure = { onResult(false, "USB print failed: ${it.localizedMessage}") }
                 )
             }
             else -> {
@@ -70,9 +120,8 @@ internal fun StorePointViewModel.hardwareTestPrinterImpl(onResult: (Boolean, Str
 
 internal fun StorePointViewModel.hardwareKickCashDrawerImpl(onResult: (Boolean, String) -> Unit) {
     viewModelScope.launch {
-        val type = printerType.value
         val kickBytes = EscPosHelper.buildDrawerKickBytes()
-        when (type) {
+        when (printerType.value) {
             EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
                 val res = EscPosHelper.printOverNetwork(printerIpAddress.value, printerPort.value, kickBytes)
                 res.fold(
@@ -85,6 +134,13 @@ internal fun StorePointViewModel.hardwareKickCashDrawerImpl(onResult: (Boolean, 
                 res.fold(
                     onSuccess = { onResult(true, "Cash drawer kick pulse sent (Bluetooth).") },
                     onFailure = { onResult(false, "Bluetooth drawer kick failed: ${it.localizedMessage}") }
+                )
+            }
+            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
+                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, kickBytes)
+                res.fold(
+                    onSuccess = { onResult(true, "Cash drawer kick pulse sent (USB).") },
+                    onFailure = { onResult(false, "USB drawer kick failed: ${it.localizedMessage}") }
                 )
             }
             else -> {
@@ -107,7 +163,15 @@ internal fun StorePointViewModel.hardwarePrintReceiptImpl(
         val type = printerType.value
         val autoKick = isAutoKickDrawerEnabled.value
         val is80 = is80mmThermal.value
-        val receiptBytes = EscPosHelper.buildReceiptEscPos(cfg, transaction, items, is80mm = is80, kickDrawerOnPrint = autoKick)
+        val hasCutter = printerHasAutoCutter.value
+        val receiptBytes = EscPosHelper.buildReceiptEscPos(
+            storeConfig = cfg,
+            transaction = transaction,
+            items = items,
+            is80mm = is80,
+            kickDrawerOnPrint = autoKick,
+            hasAutoCutter = hasCutter
+        )
 
         when (type) {
             EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
@@ -124,8 +188,49 @@ internal fun StorePointViewModel.hardwarePrintReceiptImpl(
                     onFailure = { onCompleted(false, "Bluetooth printer error: ${it.localizedMessage}") }
                 )
             }
+            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
+                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, receiptBytes)
+                res.fold(
+                    onSuccess = { onCompleted(true, "Receipt printed over USB OTG ESC/POS.") },
+                    onFailure = { onCompleted(false, "USB printer error: ${it.localizedMessage}") }
+                )
+            }
             else -> {
                 onCompleted(false, "Printer type set to System Spooler. Use standard Print Dialog.")
+            }
+        }
+    }
+}
+
+internal fun StorePointViewModel.hardwarePrintZReadingImpl(
+    zTicketBytes: ByteArray,
+    onCompleted: (Boolean, String) -> Unit
+) {
+    viewModelScope.launch {
+        when (printerType.value) {
+            EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
+                val res = EscPosHelper.printOverNetwork(printerIpAddress.value, printerPort.value, zTicketBytes)
+                res.fold(
+                    onSuccess = { onCompleted(true, "Z-Reading printed to network printer.") },
+                    onFailure = { onCompleted(false, "Network printer error: ${it.localizedMessage}") }
+                )
+            }
+            EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name -> {
+                val res = EscPosHelper.printOverBluetooth(printerBtMac.value, zTicketBytes)
+                res.fold(
+                    onSuccess = { onCompleted(true, "Z-Reading printed to Bluetooth printer.") },
+                    onFailure = { onCompleted(false, "Bluetooth printer error: ${it.localizedMessage}") }
+                )
+            }
+            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
+                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, zTicketBytes)
+                res.fold(
+                    onSuccess = { onCompleted(true, "Z-Reading printed to USB printer.") },
+                    onFailure = { onCompleted(false, "USB printer error: ${it.localizedMessage}") }
+                )
+            }
+            else -> {
+                onCompleted(false, "Thermal printer not connected. Connect Bluetooth, USB or Network printer.")
             }
         }
     }

@@ -22,6 +22,7 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <uses-feature android:name="android.hardware.biometric" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <queries>
         <intent>

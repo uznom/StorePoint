@@ -2200,6 +2200,8 @@ fun CashierPOSScreen(
                             onClick = {
                                 coroutineScope.launch {
                                     try {
+                                        val is80 = viewModel.is80mmThermal.value
+                                        val hasCutter = viewModel.printerHasAutoCutter.value
                                         val zTicket = com.munzo.storepoint.util.EscPosHelper.buildShiftZReadingTicket(
                                             storeConfig = storeConfig ?: StoreConfig(storeName = "StorePoint POS", currencySymbol = curr, taxPercentage = 12.0),
                                             cashierUsername = activeSession?.cashierUsername ?: "Cashier",
@@ -2214,19 +2216,12 @@ fun CashierPOSScreen(
                                             vatableSales = sessionVatableSales,
                                             vatAmount = sessionVatAmount,
                                             payouts = sessionPayouts,
-                                            transactionCount = sessionTransactions.size
+                                            transactionCount = sessionTransactions.size,
+                                            is80mm = is80,
+                                            hasAutoCutter = hasCutter
                                         )
-                                        val printerIp = viewModel.printerIpAddress.value
-                                        val printerPort = viewModel.printerPort.value
-                                        val printerMac = viewModel.printerBtMac.value
-                                        if (printerIp.isNotBlank() && printerIp != "192.168.1.100") {
-                                            com.munzo.storepoint.util.EscPosHelper.printOverNetwork(printerIp, printerPort, zTicket)
-                                            Toast.makeText(context, "Z-Reading printed to network printer", Toast.LENGTH_SHORT).show()
-                                        } else if (printerMac.isNotBlank()) {
-                                            com.munzo.storepoint.util.EscPosHelper.printOverBluetooth(printerMac, zTicket)
-                                            Toast.makeText(context, "Z-Reading printed to Bluetooth printer", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Z-Reading generated! Connect a thermal printer in Admin to print physically.", Toast.LENGTH_LONG).show()
+                                        viewModel.printShiftZReading(zTicket) { success, msg ->
+                                            Toast.makeText(context, msg, if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
                                         }
                                     } catch (e: Exception) {
                                         Toast.makeText(context, "Print error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()

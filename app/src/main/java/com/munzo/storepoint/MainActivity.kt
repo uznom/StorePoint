@@ -54,6 +54,12 @@ class MainActivity : FragmentActivity() {
         android.util.Log.d("MainActivity", "Camera permission outcome: $isGranted")
     }
 
+    private val requestBluetoothPermissionsLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        android.util.Log.d("MainActivity", "Bluetooth permissions outcome: $permissions")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -102,6 +108,32 @@ class MainActivity : FragmentActivity() {
             }
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed launching camera permission request", e)
+        }
+
+        // Check BLUETOOTH permissions on Android 12+ (API 31+) for thermal printers like XP-58 Plus
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val needed = mutableListOf<String>()
+                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        this,
+                        android.Manifest.permission.BLUETOOTH_CONNECT
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    needed.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+                }
+                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        this,
+                        android.Manifest.permission.BLUETOOTH_SCAN
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    needed.add(android.Manifest.permission.BLUETOOTH_SCAN)
+                }
+                if (needed.isNotEmpty()) {
+                    requestBluetoothPermissionsLauncher.launch(needed.toTypedArray())
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed launching bluetooth permission request", e)
         }
 
         setContent {

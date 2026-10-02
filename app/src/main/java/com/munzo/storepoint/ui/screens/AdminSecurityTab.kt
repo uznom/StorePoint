@@ -168,11 +168,16 @@ fun SecurityTab(viewModel: StorePointViewModel) {
     val printerIp by viewModel.printerIpAddress.collectAsState()
     val printerPort by viewModel.printerPort.collectAsState()
     val printerMac by viewModel.printerBtMac.collectAsState()
+    val printerDeviceName by viewModel.printerDeviceName.collectAsState()
+    val printerUsbIdentifier by viewModel.printerUsbIdentifier.collectAsState()
     val is80mm by viewModel.is80mmThermal.collectAsState()
     val isAutoKick by viewModel.isAutoKickDrawerEnabled.collectAsState()
+    val printerHasCutter by viewModel.printerHasAutoCutter.collectAsState()
     var editPrinterIp by remember(printerIp) { mutableStateOf(printerIp) }
     var editPrinterPort by remember(printerPort) { mutableStateOf(printerPort.toString()) }
     var editPrinterMac by remember(printerMac) { mutableStateOf(printerMac) }
+    var showBtDevicesDialog by remember { mutableStateOf(false) }
+    var showUsbDevicesDialog by remember { mutableStateOf(false) }
 
     // Diagnostics states
     val crashLogs by viewModel.crashLogs.collectAsState()
@@ -1003,7 +1008,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                 }
 
                 Text(
-                    text = "Connect network TCP/IP or Bluetooth thermal receipt printers. Direct ESC/POS byte commands enable ultra-fast receipt printing and automatic solenoid cash drawer release.",
+                    text = "Connect Bluetooth (XP-58 Plus / POS-58), USB OTG, or Network thermal receipt printers. Direct ESC/POS byte commands enable ultra-fast receipt printing and automatic solenoid cash drawer release like in Loyverse.",
                     style = MaterialTheme.typography.bodyMedium
                 )
 
@@ -1011,12 +1016,13 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                 Text("Connection Mode:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val types = listOf(
                         EscPosHelper.PrinterType.SYSTEM_SPOOLER to "System Print",
-                        EscPosHelper.PrinterType.NETWORK_ESCPOS to "Network LAN",
-                        EscPosHelper.PrinterType.BLUETOOTH_ESCPOS to "Bluetooth"
+                        EscPosHelper.PrinterType.BLUETOOTH_ESCPOS to "Bluetooth",
+                        EscPosHelper.PrinterType.USB_ESCPOS to "USB OTG",
+                        EscPosHelper.PrinterType.NETWORK_ESCPOS to "Network LAN"
                     )
                     types.forEach { (type, label) ->
                         val isSelected = printerType == type.name
@@ -1029,6 +1035,113 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                     }
                 }
 
+                // Bluetooth Configuration (XP-58 Plus / POS-58)
+                if (printerType == EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (printerDeviceName.isNotBlank()) "Selected: $printerDeviceName" else if (printerMac.isNotBlank()) "MAC: $printerMac" else "No Bluetooth Printer Selected",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                if (printerMac.isNotBlank()) {
+                                    Text("Address: $printerMac", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Button(
+                                onClick = { showBtDevicesDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Search", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+
+                        Text(
+                            text = "Loyverse-style one-tap pairing: tap 'Search' to pick your XP-58 Plus from paired devices (default PIN: 0000 or 1234).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        var showManualMac by remember { mutableStateOf(false) }
+                        TextButton(
+                            onClick = { showManualMac = !showManualMac },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text(if (showManualMac) "Hide Manual MAC Entry" else "Advanced: Enter MAC Manually", style = MaterialTheme.typography.labelSmall)
+                        }
+
+                        if (showManualMac) {
+                            OutlinedTextField(
+                                value = editPrinterMac,
+                                onValueChange = {
+                                    editPrinterMac = it
+                                    viewModel.setPrinterBluetoothMac(it)
+                                },
+                                label = { Text("Bluetooth MAC Address") },
+                                placeholder = { Text("00:11:22:33:44:55") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
+                }
+
+                // USB OTG Configuration (XP-58 Plus USB)
+                if (printerType == EscPosHelper.PrinterType.USB_ESCPOS.name) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (printerDeviceName.isNotBlank()) "Selected: $printerDeviceName" else if (printerUsbIdentifier.isNotBlank()) "USB: $printerUsbIdentifier" else "No USB Printer Selected",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                if (printerUsbIdentifier.isNotBlank()) {
+                                    Text("Identifier: $printerUsbIdentifier", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Button(
+                                onClick = { showUsbDevicesDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Scan USB", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+
+                        Text(
+                            text = "Connect XP-58 Plus using a standard USB printer cable + USB-OTG adapter to your Android device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Network LAN Configuration
                 if (printerType == EscPosHelper.PrinterType.NETWORK_ESCPOS.name) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1060,21 +1173,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                     }
                 }
 
-                if (printerType == EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name) {
-                    OutlinedTextField(
-                        value = editPrinterMac,
-                        onValueChange = {
-                            editPrinterMac = it
-                            viewModel.setPrinterBluetoothMac(it)
-                        },
-                        label = { Text("Bluetooth MAC Address") },
-                        placeholder = { Text("00:11:22:33:44:55") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-
-                // Paper width and auto drawer switches
+                // Paper width, cutter and auto drawer switches
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1082,7 +1181,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("80mm Paper Width", fontWeight = FontWeight.SemiBold)
-                        Text(if (is80mm) "80mm Wide (48 columns)" else "58mm Standard (32 columns)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (is80mm) "80mm Wide (48 columns)" else "58mm Standard / XP-58 Plus (32 columns)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = is80mm, onCheckedChange = { viewModel.setPaperWidth80mm(it) })
                 }
@@ -1093,8 +1192,24 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
+                        Text("Automatic Paper Cutter", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = if (printerHasCutter) "Enabled (Sends GS V cut command)" else "Disabled (Feed lines for XP-58 Plus manual tear bar)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = printerHasCutter, onCheckedChange = { viewModel.setPrinterHasAutoCutter(it) })
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text("Auto-Kick Drawer on Cash Sale", fontWeight = FontWeight.SemiBold)
-                        Text("Automatically pop drawer open upon cash checkout completion", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Automatically pop drawer open upon cash checkout completion (RJ11)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = isAutoKick, onCheckedChange = { viewModel.setAutoKickDrawerEnabled(it) })
                 }
@@ -2278,6 +2393,169 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             confirmButton = {
                 Button(onClick = { showRestoreSummaryDialog = false }) {
                     Text("OK")
+                }
+            }
+        )
+    }
+
+    // --- BLUETOOTH PRINTER SELECTION DIALOG (XP-58 Plus) ---
+    if (showBtDevicesDialog) {
+        val pairedPrinters = remember { EscPosHelper.getPairedBluetoothPrinters(context) }
+        AlertDialog(
+            onDismissRequest = { showBtDevicesDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Select Bluetooth Printer", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                if (pairedPrinters.isEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "No paired Bluetooth devices found.",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "To connect your XP-58 Plus or thermal printer:\n1. Turn on the printer.\n2. Open Android Settings > Bluetooth.\n3. Pair the printer (standard PIN: 0000 or 1234).\n4. Return here and tap Search.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(pairedPrinters) { device ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.setPrinterBluetoothConfig(device.macAddress, device.name)
+                                        editPrinterMac = device.macAddress
+                                        showBtDevicesDialog = false
+                                        Toast.makeText(context, "Selected ${device.name}", Toast.LENGTH_SHORT).show()
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (printerMac == device.macAddress)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(device.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(device.macAddress, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    if (device.isLikelyPosPrinter) {
+                                        Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                            Text("POS / XP-58", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBtDevicesDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // --- USB OTG THERMAL PRINTER SELECTION DIALOG ---
+    if (showUsbDevicesDialog) {
+        val usbPrinters = remember { UsbPrinterHelper.getConnectedUsbPrinters(context) }
+        AlertDialog(
+            onDismissRequest = { showUsbDevicesDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Select USB Thermal Printer", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                if (usbPrinters.isEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "No USB thermal printers detected.",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Connect your XP-58 Plus using a USB cable and USB-OTG adapter, verify the printer is turned on, and tap Scan USB again.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(usbPrinters) { device ->
+                            val rawDevice = remember { UsbPrinterHelper.findDeviceByIdentifier(context, device.identifier) }
+                            val hasPerm = rawDevice?.let { UsbPrinterHelper.hasPermission(context, it) } ?: false
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (rawDevice != null && !hasPerm) {
+                                            UsbPrinterHelper.requestPermission(context, rawDevice) { granted ->
+                                                if (granted) {
+                                                    viewModel.setPrinterUsbConfig(device.identifier, device.displayName)
+                                                    showUsbDevicesDialog = false
+                                                    Toast.makeText(context, "USB Printer Connected: ${device.displayName}", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "USB permission denied", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        } else {
+                                            viewModel.setPrinterUsbConfig(device.identifier, device.displayName)
+                                            showUsbDevicesDialog = false
+                                            Toast.makeText(context, "Selected ${device.displayName}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (printerUsbIdentifier == device.identifier)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(device.displayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("ID: ${device.identifier}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    if (!hasPerm) {
+                                        Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                            Text("Needs Permission", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showUsbDevicesDialog = false }) {
+                    Text("Close")
                 }
             }
         )

@@ -418,13 +418,15 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     // --- Disaster Recovery & Database Backup ---
     val backupSnapshots = MutableStateFlow<List<File>>(emptyList())
 
-    // --- Hardware Peripherals & Direct ESC/POS Printing ---
     val printerType = MutableStateFlow(prefs.getString("printer_type", EscPosHelper.PrinterType.SYSTEM_SPOOLER.name) ?: EscPosHelper.PrinterType.SYSTEM_SPOOLER.name)
     val printerIpAddress = MutableStateFlow(prefs.getString("printer_ip", "192.168.1.100") ?: "192.168.1.100")
     val printerPort = MutableStateFlow(prefs.getInt("printer_port", 9100))
     val printerBtMac = MutableStateFlow(prefs.getString("printer_bt_mac", "") ?: "")
+    val printerDeviceName = MutableStateFlow(prefs.getString("printer_device_name", "") ?: "")
+    val printerUsbIdentifier = MutableStateFlow(prefs.getString("printer_usb_id", "") ?: "")
     val isAutoKickDrawerEnabled = MutableStateFlow(prefs.getBoolean("auto_kick_drawer", true))
     val is80mmThermal = MutableStateFlow(prefs.getBoolean("is_80mm_thermal", false))
+    val printerHasAutoCutter = MutableStateFlow(prefs.getBoolean("printer_has_cutter", false))
 
     init {
         // Pre-populate core default accounts and product folders quickly
@@ -1176,11 +1178,15 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     fun setPrinterType(type: String) = hardwareSetPrinterTypeImpl(type)
     fun setPrinterNetworkConfig(ip: String, port: Int) = hardwareSetPrinterNetworkConfigImpl(ip, port)
     fun setPrinterBluetoothMac(mac: String) = hardwareSetPrinterBluetoothMacImpl(mac)
+    fun setPrinterBluetoothConfig(mac: String, name: String) = hardwareSetPrinterBluetoothConfigImpl(mac, name)
+    fun setPrinterUsbConfig(identifier: String, name: String) = hardwareSetPrinterUsbConfigImpl(identifier, name)
+    fun setPrinterHasAutoCutter(hasCutter: Boolean) = hardwareSetPrinterAutoCutterImpl(hasCutter)
     fun setPaperWidth80mm(is80: Boolean) = hardwareSetPaperWidth80mmImpl(is80)
     fun setAutoKickDrawerEnabled(enabled: Boolean) = hardwareSetAutoKickDrawerEnabledImpl(enabled)
     fun testHardwarePrinter(onResult: (Boolean, String) -> Unit) = hardwareTestPrinterImpl(onResult)
     fun kickCashDrawer(onResult: (Boolean, String) -> Unit) = hardwareKickCashDrawerImpl(onResult)
     fun printReceiptHardware(transaction: Transaction, items: List<TransactionItem>, onCompleted: (Boolean, String) -> Unit) = hardwarePrintReceiptImpl(transaction, items, onCompleted)
+    fun printShiftZReading(zTicketBytes: ByteArray, onCompleted: (Boolean, String) -> Unit) = hardwarePrintZReadingImpl(zTicketBytes, onCompleted)
 
     // --- Backup & Disaster Recovery Forwarders ---
     fun refreshCrashLogs() = backupRefreshCrashLogsImpl()
