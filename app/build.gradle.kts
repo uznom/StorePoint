@@ -11,14 +11,14 @@ android {
 
   defaultConfig {
     applicationId = "com.munzo.storepoint"
-    minSdk = 34
+    minSdk = 23
     targetSdk = 36
     // versionName MUST match the release tag (minus the leading "v").
     // AppUpdateManager.isVersionNewer() compares the newest GitHub release tag
     // against BuildConfig.VERSION_NAME; if these drift, a terminal that has already
     // installed the latest APK is told an update is available forever.
-    versionCode = 106
-    versionName = "1.0.1.6"
+    versionCode = 108
+    versionName = "1.0.1.8"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
