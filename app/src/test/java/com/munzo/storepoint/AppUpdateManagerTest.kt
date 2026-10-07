@@ -57,7 +57,7 @@ class AppUpdateManagerTest {
         // release tag against BuildConfig.VERSION_NAME. If versionName drifts below the
         // shipped tag, a terminal that already installed the latest APK is prompted to
         // update forever. Bump this in lockstep with app/build.gradle.kts and the tag.
-        org.junit.Assert.assertEquals("1.0.1.8", com.munzo.storepoint.util.APP_VERSION)
+        org.junit.Assert.assertEquals("1.0.1.9", com.munzo.storepoint.util.APP_VERSION)
     }
 
     @Test
