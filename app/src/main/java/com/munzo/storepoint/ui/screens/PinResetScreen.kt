@@ -428,9 +428,6 @@ private fun VerifyStep(
             PinPadEntry(
                 pin = currentPin,
                 onPinChange = onPinChange,
-                // The legacy format is 6 digits, so this pad is intentionally wider
-                // than the standard 4-digit pad used elsewhere.
-                pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                 isMasked = true,
                 isEnabled = !isWorking,
                 modifier = Modifier.fillMaxWidth().testTag("pin_reset_current_pin")
@@ -477,7 +474,6 @@ private fun ChooseStep(
             ExpressiveOtpPinInput(
                 pin = newPin,
                 onPinChange = onPinChange,
-                pinLength = SecurityHelper.PIN_LENGTH,
                 isMasked = true,
                 isError = isWeak,
                 modifier = Modifier.fillMaxWidth().testTag("pin_reset_new_pin")
@@ -549,7 +545,6 @@ private fun ConfirmStep(
             ExpressiveOtpPinInput(
                 pin = confirmPin,
                 onPinChange = onPinChange,
-                pinLength = SecurityHelper.PIN_LENGTH,
                 isMasked = true,
                 isError = mismatch,
                 modifier = Modifier.fillMaxWidth().testTag("pin_reset_confirm_pin")

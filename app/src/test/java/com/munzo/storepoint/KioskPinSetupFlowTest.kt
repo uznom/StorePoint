@@ -24,7 +24,7 @@ class KioskPinSetupFlowTest {
         assertTrue(KioskPinSetupFlow.isComplete("5371"))
         assertFalse("empty must not be complete", KioskPinSetupFlow.isComplete(""))
         assertFalse("3 digits is short", KioskPinSetupFlow.isComplete("537"))
-        assertFalse("legacy 6 digits is not the current format", KioskPinSetupFlow.isComplete("537192"))
+        assertFalse("6 digits is not the current format", KioskPinSetupFlow.isComplete("537192"))
         assertFalse("non-numeric is refused", KioskPinSetupFlow.isComplete("53a1"))
     }
 

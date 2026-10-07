@@ -789,7 +789,6 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                             ExpressiveOtpPinInput(
                                 pin = adminPassword,
                                 onPinChange = { adminPassword = it },
-                                pinLength = SecurityHelper.PIN_LENGTH,
                                 isMasked = true,
                                 isError = adminPinWeak,
                                 modifier = Modifier

@@ -614,7 +614,6 @@ fun AdminDashboardScreen(
                             ExpressiveOtpPinInput(
                                 pin = inputPin,
                                 onPinChange = { inputPin = it },
-                                pinLength = SecurityHelper.PIN_LENGTH,
                                 isMasked = true,
                                 isError = pinIsWeak,
                                 modifier = Modifier.fillMaxWidth().testTag("staff_password_input")

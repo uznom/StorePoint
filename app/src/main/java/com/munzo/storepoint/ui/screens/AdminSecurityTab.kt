@@ -1799,7 +1799,6 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                                 pinSetupInput = newPin.take(SecurityHelper.PIN_LENGTH)
                                 pinSetupError = ""
                             },
-                            pinLength = SecurityHelper.PIN_LENGTH,
                             isMasked = false,
                             isError = pinSetupError.isNotEmpty(),
                             errorMessage = pinSetupError.ifEmpty { null },
@@ -1820,7 +1819,6 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                                 pinSetupConfirmInput = newPin.take(SecurityHelper.PIN_LENGTH)
                                 pinSetupError = ""
                             },
-                            pinLength = SecurityHelper.PIN_LENGTH,
                             isMasked = false,
                             isError = pinSetupError.isNotEmpty(),
                             errorMessage = pinSetupError.ifEmpty { null },
@@ -1931,10 +1929,9 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         onPinChange = { newPin ->
                             // Clear on every change so a wrong PIN is not left on screen
                             // for the next guess to read.
-                            pinVerifyInput = newPin.take(SecurityHelper.LEGACY_PIN_LENGTH)
+                            pinVerifyInput = newPin.take(SecurityHelper.PIN_LENGTH)
                             pinVerifyError = ""
                         },
-                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = pinVerifyError.isNotEmpty(),
                         errorMessage = pinVerifyError.ifEmpty { null },
@@ -2018,7 +2015,6 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                             adminAuthPin = it
                             adminAuthError = ""
                         },
-                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = adminAuthError.isNotEmpty(),
                         errorMessage = adminAuthError.ifEmpty { null },
@@ -2069,7 +2065,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             title = { Text("Validate Administrative Authority", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Warning! This deletes all transaction items, users, and catalog sets. Retriggering the system setup sequence. Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits; legacy 6-digit accounts also accepted) to proceed:")
+                    Text("Warning! This deletes all transaction items, users, and catalog sets. Retriggering the system setup sequence. Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits) to proceed:")
                     Spacer(Modifier.height(4.dp))
                     // Keypad, not the IME: this authorises a destructive, irreversible
                     // wipe of all sales and inventory.
@@ -2079,7 +2075,6 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                             adminWipePasswordInput = it
                             wipeDataError = ""
                         },
-                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = wipeDataError.isNotEmpty(),
                         errorMessage = wipeDataError.ifEmpty { null },
@@ -2133,7 +2128,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "You are importing inventory data (.spinventory package / catalog). Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits; legacy 6-digit accounts also accepted) to certify and merge this into the active store catalog:",
+                        text = "You are importing inventory data (.spinventory package / catalog). Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits) to certify and merge this into the active store catalog:",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(4.dp))
@@ -2145,7 +2140,6 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                             importInventoryPinInput = it
                             importInventoryPinError = ""
                         },
-                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = importInventoryPinError.isNotEmpty(),
                         errorMessage = importInventoryPinError.ifEmpty { null },
@@ -2385,19 +2379,19 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         singleLine = true
                     )
                     Text(
-                        "Full restore overwrites store data. Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits; legacy 6-digit accounts also accepted) to authorize:",
+                        "Full restore overwrites store data. Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits) to authorize:",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
                     OutlinedTextField(
                         value = restoreAdminPinInput,
                         onValueChange = {
-                            if (it.length <= 6 && it.all { c -> c.isDigit() }) {
+                            if (it.length <= SecurityHelper.PIN_LENGTH && it.all { c -> c.isDigit() }) {
                                 restoreAdminPinInput = it
                                 restoreAdminPinError = ""
                             }
                         },
-                        label = { Text("Admin PIN (${SecurityHelper.PIN_LENGTH} or ${SecurityHelper.LEGACY_PIN_LENGTH} digits)") },
+                        label = { Text("Admin PIN (${SecurityHelper.PIN_LENGTH} digits)") },
                         isError = restoreAdminPinError.isNotEmpty(),
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),

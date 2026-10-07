@@ -1200,23 +1200,29 @@ fun ExpressiveMorphingBadge(
  * - Masked (expressive dots) or unmasked numeral display with instant feedback.
  * - Hardware keyboard, soft keyboard, backspace, and IME complete integration.
  *
+ * The field is fixed to exactly [PIN_BOX_COUNT] boxes — no caller can change it,
+ * so every PIN prompt in the app is consistent.
+ *
  * @param enableSoftKeyboard when false the field becomes read-only and no longer
  *   summons the IME, so an on-screen [ExpressivePinPad] becomes the sole input. This
  *   keeps a POS terminal from covering half the screen with a system keyboard on
  *   every PIN prompt, and removes a shoulder-surfing surface for PINs.
  */
+/** Fixed number of segmented boxes rendered by every PIN field. Always 4. */
+const val PIN_BOX_COUNT = 4
+
 @Composable
 fun ExpressiveOtpPinInput(
     pin: String,
     onPinChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    pinLength: Int = 6,
     isMasked: Boolean = true,
     isError: Boolean = false,
     errorMessage: String? = null,
     onPinComplete: ((String) -> Unit)? = null,
     enableSoftKeyboard: Boolean = true
 ) {
+    val pinLength = PIN_BOX_COUNT
     val focusRequester = remember { FocusRequester() }
 
     // A transparent wrapper carries the tap-to-focus gesture so the display keeps
@@ -1504,13 +1510,13 @@ fun PinPadEntry(
     pin: String,
     onPinChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    pinLength: Int = 4,
     isMasked: Boolean = true,
     isError: Boolean = false,
     errorMessage: String? = null,
     onPinComplete: ((String) -> Unit)? = null,
     isEnabled: Boolean = true
 ) {
+    val pinLength = PIN_BOX_COUNT
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1518,7 +1524,6 @@ fun PinPadEntry(
         ExpressiveOtpPinInput(
             pin = pin,
             onPinChange = onPinChange,
-            pinLength = pinLength,
             isMasked = isMasked,
             isError = isError,
             errorMessage = errorMessage,

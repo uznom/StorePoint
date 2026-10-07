@@ -76,7 +76,7 @@ class SecurityHelperTest {
 
         assertFalse("3 digits must fail", SecurityHelper.isValidPin("123"))
         assertFalse("5 digits must fail", SecurityHelper.isValidPin("12345"))
-        assertFalse("6 digits (legacy) must fail strict validation", SecurityHelper.isValidPin("123456"))
+        assertFalse("6 digits must fail strict validation", SecurityHelper.isValidPin("123456"))
         assertFalse("Alphanumeric must fail", SecurityHelper.isValidPin("12a4"))
         assertFalse("Letters must fail", SecurityHelper.isValidPin("abcd"))
         assertFalse("Empty string must fail", SecurityHelper.isValidPin(""))
@@ -84,9 +84,9 @@ class SecurityHelperTest {
     }
 
     @Test
-    fun isValidPinLenient_acceptsBoth4And6Digits() {
+    fun isValidPinLenient_strictFourDigitsOnly() {
         assertTrue("4 digits accepted", SecurityHelper.isValidPinLenient("1234"))
-        assertTrue("6 legacy digits accepted", SecurityHelper.isValidPinLenient("123456"))
+        assertFalse("6 digits rejected", SecurityHelper.isValidPinLenient("123456"))
         assertFalse("5 digits rejected", SecurityHelper.isValidPinLenient("12345"))
         assertFalse("7 digits rejected", SecurityHelper.isValidPinLenient("1234567"))
         assertFalse("letters rejected", SecurityHelper.isValidPinLenient("abcdef"))
@@ -123,22 +123,23 @@ class SecurityHelperTest {
     @Test
     fun isWeakPin_rejectsMalformedLengths() {
         assertTrue("wrong length is not a valid pin", SecurityHelper.isWeakPin("123"))
-        assertTrue("legacy 6-digit is not a valid pin", SecurityHelper.isWeakPin("123456"))
+        assertTrue("6-digit is not a valid pin", SecurityHelper.isWeakPin("123456"))
         assertTrue("empty is not a valid pin", SecurityHelper.isWeakPin(""))
     }
 
     @Test
-    fun verifyPinLenient_acceptsLegacySixDigitButStrictRejects() {
-        val legacyPin = "654321"
-        val hash = SecurityHelper.hashPin(legacyPin)
+    fun verifyPinLenient_strictFourDigitsOnly() {
+        val pin = "4567"
+        val hash = SecurityHelper.hashPin(pin)
 
-        assertTrue("Lenient gate must accept legacy 6-digit holder", SecurityHelper.verifyPinLenient(legacyPin, hash).isMatch)
+        assertTrue("Strict 4-digit pin verifies normally", SecurityHelper.verifyPinLenient(pin, hash).isMatch)
+        assertFalse("6 digits must not pass the gate", SecurityHelper.verifyPinLenient("654321", hash).isMatch)
         assertTrue("Strict 4-digit pin verifies normally", SecurityHelper.verifyPin("4567", SecurityHelper.hashPin("4567")).isMatch)
     }
 
     @Test
     fun verifyPinLenient_rejectsWrongLengthAndWrongPin() {
-        val hash = SecurityHelper.hashPin("654321")
+        val hash = SecurityHelper.hashPin("4567")
         assertFalse("5 digits must not pass the gate", SecurityHelper.verifyPinLenient("65432", hash).isMatch)
         assertFalse("wrong 6-digit must fail", SecurityHelper.verifyPinLenient("111111", hash).isMatch)
         assertFalse("wrong 4-digit must fail", SecurityHelper.verifyPinLenient("1111", hash).isMatch)

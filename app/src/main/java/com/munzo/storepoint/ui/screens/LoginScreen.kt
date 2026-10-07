@@ -117,7 +117,6 @@ fun LoginScreen(
                     PinPadEntry(
                         pin = logoUnlockInput,
                         onPinChange = { logoUnlockInput = it },
-                        pinLength = 6,
                         isMasked = true,
                         isError = logoUnlockError.isNotEmpty(),
                         errorMessage = logoUnlockError.ifEmpty { null },
@@ -494,7 +493,6 @@ fun LoginScreen(
                                 // Auto-login the instant the final digit lands - no
                                 // "Sign In" tap required in the common case.
                                 onPinComplete = { completed -> attemptLogin(completed) },
-                                pinLength = SecurityHelper.PIN_LENGTH,
                                 isMasked = true,
                                 isError = loginError.isNotEmpty(),
                                 errorMessage = loginError.ifEmpty { null },

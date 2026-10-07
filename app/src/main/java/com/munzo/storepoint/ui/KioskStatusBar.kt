@@ -246,10 +246,6 @@ fun KioskStatusBar(
                             adminAuthPin = it
                             adminAuthError = ""
                         },
-                        // Accepts the legacy 6-digit pad on purpose: an admin who has not
-                        // yet completed the 4-digit migration must still be able to exit
-                        // kiosk lockdown. Verification is correspondingly lenient.
-                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = adminAuthError.isNotEmpty(),
                         errorMessage = adminAuthError,
@@ -330,7 +326,6 @@ fun KioskStatusBar(
                             unlockInput = it
                             unlockError = ""
                         },
-                        pinLength = SecurityHelper.LEGACY_PIN_LENGTH,
                         isMasked = true,
                         isError = unlockError.isNotEmpty(),
                         errorMessage = unlockError.ifEmpty { null },

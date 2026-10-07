@@ -12,15 +12,8 @@ object SecurityHelper {
     private const val KEY_LENGTH_BITS = 256
     private const val SALT_BYTES_LENGTH = 16
 
-    /** Canonical PIN length for all newly created or reset credentials. */
+    /** Canonical PIN length for all credentials. Always 4. */
     const val PIN_LENGTH = 4
-
-    /**
-     * Legacy PIN length accepted *only* by the one-time credential reset gate so that
-     * existing 6-digit holders can authorize their own migration to [PIN_LENGTH].
-     * It is never accepted for a normal sign-in.
-     */
-    const val LEGACY_PIN_LENGTH = 6
 
     data class VerificationResult(
         val isMatch: Boolean,
@@ -35,20 +28,20 @@ object SecurityHelper {
     }
 
     /**
-     * Accepts either the current [PIN_LENGTH] or the legacy [LEGACY_PIN_LENGTH] format.
-     * Used exclusively by [verifyPinLenient] on the credential-reset gate.
+     * Strict 4-digit validation. Kept as an alias so existing call sites that used
+     * the lenient gate keep compiling while behaving strictly.
      */
     fun isValidPinLenient(pin: String): Boolean {
-        return (pin.length == PIN_LENGTH || pin.length == LEGACY_PIN_LENGTH) && pin.all { it.isDigit() }
+        return isValidPin(pin)
     }
 
     /**
      * Rejects trivially guessable PINs.
      *
-     * A 4-digit PIN has a 10,000-combination keyspace (vs 1,000,000 for the legacy
-     * 6-digit format), so sequential, repeated, and keyboard-walk patterns are refused
-     * outright at creation time. Existing stored credentials are never re-validated
-     * against this policy — only newly chosen PINs are.
+     * A 4-digit PIN has a 10,000-combination keyspace, so sequential, repeated,
+     * and keyboard-walk patterns are refused outright at creation time.
+     * Existing stored credentials are never re-validated against this policy —
+     * only newly chosen PINs are.
      */
     fun isWeakPin(pin: String): Boolean {
         if (!isValidPin(pin)) return true
@@ -72,10 +65,7 @@ object SecurityHelper {
         pin.zipWithNext().all { (a, b) -> a - b == 1 }
 
     /**
-     * Generates a salted PBKDF2-HMAC-SHA256 hash for a numeric PIN.
-     *
-     * Length-agnostic on purpose: it is used for both the current 4-digit PIN and the
-     * legacy 6-digit credential during the migration window.
+     * Generates a salted PBKDF2-HMAC-SHA256 hash for a 4-digit numeric PIN.
      */
     fun hashPin(pin: String): String = hashPassword(pin)
 
@@ -85,16 +75,11 @@ object SecurityHelper {
     fun verifyPin(pin: String, storedHash: String): VerificationResult = verifyPassword(pin, storedHash)
 
     /**
-     * Verifies a PIN that may still be in the legacy 6-digit format.
-     *
-     * This exists for one purpose only: letting a user holding a pre-migration 6-digit
-     * credential authorize their own reset to a 4-digit PIN. It is a thin guard in
-     * front of [verifyPin] and adds no cryptographic surface of its own — the length
-     * check is purely a UX/input-validation affordance, since [verifyPin] matches on
-     * the hash rather than the plaintext length.
+     * Strict 4-digit verification. Kept as an alias so existing call sites keep
+     * compiling while behaving strictly — only exactly 4 digits verify.
      */
     fun verifyPinLenient(pin: String, storedHash: String): VerificationResult {
-        if (!isValidPinLenient(pin)) return VerificationResult(isMatch = false, needsUpgrade = false)
+        if (!isValidPin(pin)) return VerificationResult(isMatch = false, needsUpgrade = false)
         return verifyPin(pin, storedHash)
     }
 
