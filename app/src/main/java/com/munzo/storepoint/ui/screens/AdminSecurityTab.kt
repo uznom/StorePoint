@@ -111,6 +111,11 @@ fun SecurityTab(viewModel: StorePointViewModel) {
     var pinSetupInput by remember { mutableStateOf("") }
     var pinSetupConfirmInput by remember { mutableStateOf("") }
     var pinSetupError by remember { mutableStateOf("") }
+    // Two-stage kiosk PIN setup: enter, then verify. Only one keypad is rendered per
+    // stage — the original dialog stacked two PinPadEntry keypads in one AlertDialog,
+    // which grew taller than the display and pushed "Confirm & Enter Lockdown"
+    // off-screen, so lockdown could never be completed.
+    var pinSetupStage by remember { mutableStateOf(KioskPinSetupFlow.Stage.ENTER) }
     
     var pinVerifyInput by remember { mutableStateOf("") }
     var pinVerifyError by remember { mutableStateOf("") }
@@ -891,6 +896,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                                 pinSetupInput = ""
                                 pinSetupConfirmInput = ""
                                 pinSetupError = ""
+                                pinSetupStage = KioskPinSetupFlow.Stage.ENTER
                                 showKioskPinSetupDialog = true
                             } else {
                                 viewModel.toggleKioskMode(true)
@@ -1758,77 +1764,152 @@ fun SecurityTab(viewModel: StorePointViewModel) {
         }
     }
 
-    // --- SETUP SECURE KIOSK MODE PIN DIALOG ---
+    // --- SETUP SECURE KIOSK MODE PIN DIALOG (stage 1: enter, stage 2: verify) ---
+    // Only one keypad is on screen per stage: PinPadEntry IS a full keypad, and two
+    // stacked in this dialog made it taller than the display, pushing "Confirm &
+    // Enter Lockdown" off-screen so lockdown could never be completed. Stage rules
+    // live in KioskPinSetupFlow; setKioskPin() remains the write-time enforcement.
     if (showKioskPinSetupDialog) {
+        val isEnterStage = pinSetupStage == KioskPinSetupFlow.Stage.ENTER
         AlertDialog(
             onDismissRequest = { showKioskPinSetupDialog = false },
-            title = { Text("Set Secure Kiosk PIN", fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = if (isEnterStage) "Set Secure Kiosk PIN - Step 1 of 2"
+                           else "Confirm Kiosk PIN - Step 2 of 2",
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Create a numeric PIN to lock/unlock Kiosk Mode. Cashiers will not be able to disable Kiosk Mode without this code.")
-                    PinPadEntry(
-                        pin = pinSetupInput,
-                        onPinChange = { newPin ->
-                            // Exactly PIN_LENGTH digits, now enforced centrally by
-                            // setKioskPin() rather than a local "<= 8" filter.
-                            pinSetupInput = newPin.take(SecurityHelper.PIN_LENGTH)
-                            pinSetupError = ""
-                        },
-                        pinLength = SecurityHelper.PIN_LENGTH,
-                        isMasked = false,
-                        isError = pinSetupError.isNotEmpty(),
-                        errorMessage = pinSetupError.ifEmpty { null },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    PinPadEntry(
-                        pin = pinSetupConfirmInput,
-                        onPinChange = { newPin ->
-                            pinSetupConfirmInput = newPin.take(SecurityHelper.PIN_LENGTH)
-                            pinSetupError = ""
-                        },
-                        pinLength = SecurityHelper.PIN_LENGTH,
-                        isMasked = false,
-                        isError = pinSetupError.isNotEmpty() && pinSetupInput == pinSetupConfirmInput,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
+                // Scrollable so the keypad, hint and the action buttons all stay
+                // reachable on short or dense displays.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (isEnterStage) {
+                        Text("Create a numeric PIN to lock/unlock Kiosk Mode. Cashiers will not be able to disable Kiosk Mode without this code.")
+                        PinPadEntry(
+                            pin = pinSetupInput,
+                            onPinChange = { newPin ->
+                                // Exactly PIN_LENGTH digits, now enforced centrally by
+                                // setKioskPin() rather than a local "<= 8" filter.
+                                pinSetupInput = newPin.take(SecurityHelper.PIN_LENGTH)
+                                pinSetupError = ""
+                            },
+                            pinLength = SecurityHelper.PIN_LENGTH,
+                            isMasked = false,
+                            isError = pinSetupError.isNotEmpty(),
+                            errorMessage = pinSetupError.ifEmpty { null },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         // The kiosk PIN is held to the same policy as every user PIN
                         // (issue #9) - it is the app's highest-value credential.
-                        text = "Confirm both entries match. ${SecurityHelper.pinPolicyHint()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                        Text(
+                            text = SecurityHelper.pinPolicyHint(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text("Re-enter the same PIN to verify it. Lockdown starts as soon as both entries match.")
+                        PinPadEntry(
+                            pin = pinSetupConfirmInput,
+                            onPinChange = { newPin ->
+                                pinSetupConfirmInput = newPin.take(SecurityHelper.PIN_LENGTH)
+                                pinSetupError = ""
+                            },
+                            pinLength = SecurityHelper.PIN_LENGTH,
+                            isMasked = false,
+                            isError = pinSetupError.isNotEmpty(),
+                            errorMessage = pinSetupError.ifEmpty { null },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        val matches = pinSetupConfirmInput == pinSetupInput
+                        Text(
+                            text = when {
+                                matches && KioskPinSetupFlow.isComplete(pinSetupConfirmInput) ->
+                                    "PINs match. Tap Confirm to enter lockdown."
+                                else -> "${pinSetupConfirmInput.length}/${SecurityHelper.PIN_LENGTH} digits entered"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (matches) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    enabled = pinSetupInput.isNotEmpty() && pinSetupInput == pinSetupConfirmInput,
-                    onClick = {
-                        if (pinSetupInput != pinSetupConfirmInput) {
-                            pinSetupError = "PINs do not match."
-                        } else {
-                            // Returns a reason on rejection; the dialog stays open so
-                            // the admin can correct it rather than silently losing the
-                            // setting.
-                            val rejection = viewModel.setKioskPin(pinSetupInput)
+                if (isEnterStage) {
+                    Button(
+                        enabled = KioskPinSetupFlow.isComplete(pinSetupInput),
+                        onClick = {
+                            // Surface a weak or malformed PIN here, before the confirm
+                            // step, so the admin can pick another code instead of
+                            // re-typing the whole thing. setKioskPin() still re-checks
+                            // this on the write.
+                            val rejection = KioskPinSetupFlow.enterRejection(pinSetupInput)
                             if (rejection != null) {
                                 pinSetupError = rejection
                             } else {
-                                showKioskPinSetupDialog = false
-                                pinSetupInput = ""
+                                pinSetupError = ""
                                 pinSetupConfirmInput = ""
-                                viewModel.toggleKioskMode(true)
-                                Toast.makeText(context, "Kiosk PIN configured. Entering lockdown.", Toast.LENGTH_SHORT).show()
+                                pinSetupStage = KioskPinSetupFlow.Stage.VERIFY
                             }
                         }
+                    ) {
+                        Text("Continue")
                     }
-                ) {
-                    Text("Confirm & Enter Lockdown")
+                } else {
+                    Button(
+                        // Enabled on a full field rather than on a match, so a mismatch
+                        // is explained ("PINs do not match") instead of leaving a dead,
+                        // silent button.
+                        enabled = KioskPinSetupFlow.isComplete(pinSetupConfirmInput),
+                        onClick = {
+                            val rejection = KioskPinSetupFlow.verifyRejection(pinSetupInput, pinSetupConfirmInput)
+                            if (rejection != null) {
+                                pinSetupError = rejection
+                                pinSetupConfirmInput = ""
+                            } else {
+                                // Returns a reason on rejection; the dialog stays open so
+                                // the admin can correct it rather than silently losing the
+                                // setting.
+                                val writeRejection = viewModel.setKioskPin(pinSetupInput)
+                                if (writeRejection != null) {
+                                    pinSetupError = writeRejection
+                                } else {
+                                    showKioskPinSetupDialog = false
+                                    pinSetupInput = ""
+                                    pinSetupConfirmInput = ""
+                                    pinSetupStage = KioskPinSetupFlow.Stage.ENTER
+                                    viewModel.toggleKioskMode(true)
+                                    Toast.makeText(context, "Kiosk PIN configured. Entering lockdown.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Confirm & Enter Lockdown")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showKioskPinSetupDialog = false }) {
-                    Text("Cancel")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!isEnterStage) {
+                        TextButton(onClick = {
+                            // Back to stage 1 without losing the chosen PIN, so a typo
+                            // in the confirmation is not a full restart.
+                            pinSetupConfirmInput = ""
+                            pinSetupError = ""
+                            pinSetupStage = KioskPinSetupFlow.Stage.ENTER
+                        }) {
+                            Text("Back")
+                        }
+                    }
+                    TextButton(onClick = { showKioskPinSetupDialog = false }) {
+                        Text("Cancel")
+                    }
                 }
             }
         )
@@ -1988,7 +2069,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             title = { Text("Validate Administrative Authority", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Warning! This deletes all transaction items, users, and catalog sets. Retriggering the system setup sequence. Enter your Admin 4-Digit PIN to proceed:")
+                    Text("Warning! This deletes all transaction items, users, and catalog sets. Retriggering the system setup sequence. Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits; legacy 6-digit accounts also accepted) to proceed:")
                     Spacer(Modifier.height(4.dp))
                     // Keypad, not the IME: this authorises a destructive, irreversible
                     // wipe of all sales and inventory.
@@ -2009,7 +2090,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    enabled = adminWipePasswordInput.length == SecurityHelper.LEGACY_PIN_LENGTH,
+                    enabled = SecurityHelper.isValidPinLenient(adminWipePasswordInput),
                     onClick = {
                         viewModel.clearAllDatabaseData(
                             adminPass = adminWipePasswordInput,
@@ -2052,7 +2133,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "You are importing inventory data (.spinventory package / catalog). Enter your Admin 4-Digit PIN to certify and merge this into the active store catalog:",
+                        text = "You are importing inventory data (.spinventory package / catalog). Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits; legacy 6-digit accounts also accepted) to certify and merge this into the active store catalog:",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(4.dp))
@@ -2075,7 +2156,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
-                        if (importInventoryPinInput.length == 6) {
+                        if (SecurityHelper.isValidPinLenient(importInventoryPinInput)) {
                             coroutineScope.launch {
                                 val isAuth = viewModel.verifyAdminPin(importInventoryPinInput)
                                 if (isAuth) {
@@ -2101,7 +2182,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                             }
                         }
                     },
-                    enabled = importInventoryPinInput.length == 6,
+                    enabled = SecurityHelper.isValidPinLenient(importInventoryPinInput),
                     modifier = Modifier.testTag("confirm_import_inventory_btn")
                 ) {
                     Text("Certify & Import")
@@ -2304,7 +2385,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                         singleLine = true
                     )
                     Text(
-                        "Full restore overwrites store data. Enter your Admin 4-Digit PIN to authorize:",
+                        "Full restore overwrites store data. Enter your Admin PIN (${SecurityHelper.PIN_LENGTH} digits; legacy 6-digit accounts also accepted) to authorize:",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -2316,7 +2397,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
                                 restoreAdminPinError = ""
                             }
                         },
-                        label = { Text("Admin 4-Digit PIN") },
+                        label = { Text("Admin PIN (${SecurityHelper.PIN_LENGTH} or ${SecurityHelper.LEGACY_PIN_LENGTH} digits)") },
                         isError = restoreAdminPinError.isNotEmpty(),
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
@@ -2327,7 +2408,7 @@ fun SecurityTab(viewModel: StorePointViewModel) {
             },
                         confirmButton = {
                 Button(
-                    enabled = restoreAdminPinInput.length == 6,
+                    enabled = SecurityHelper.isValidPinLenient(restoreAdminPinInput),
                     onClick = {
                         viewModel.viewModelScope.launch {
                             if (viewModel.verifyAdminPin(restoreAdminPinInput)) {

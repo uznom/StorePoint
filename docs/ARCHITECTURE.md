@@ -229,6 +229,13 @@ false)` makes the field read-only so the keypad is the sole input path, which al
 invisible to IME auto-fill. `KeyboardType.None` is unavailable on this Compose version, so
 suppression relies on `readOnly` plus a non-focusable wrapper.
 
+Setting the kiosk PIN is a **two-stage** wizard — choose, then verify — rendered as one
+keypad per stage. Stage rules (`enterRejection`, `verifyRejection`, `isComplete`) are pure
+and unit-tested in `KioskPinSetupFlow`; `setKioskPin()` remains the only code that writes
+the hash. The earlier dialog stacked two `PinPadEntry` keypads inside one `AlertDialog`,
+which grew taller than the display and pushed "Confirm & Enter Lockdown" off-screen — the
+PIN could never be created, so the terminal could never be locked down.
+
 ## Adaptive UI & Window Layout
 
 All responsive behavior derives from a single contract in `ui/layout/AdaptiveLayout.kt`:
