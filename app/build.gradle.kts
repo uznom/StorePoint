@@ -17,8 +17,8 @@ android {
     // AppUpdateManager.isVersionNewer() compares the newest GitHub release tag
     // against BuildConfig.VERSION_NAME; if these drift, a terminal that has already
     // installed the latest APK is told an update is available forever.
-    versionCode = 109
-    versionName = "1.0.1.9"
+    versionCode = 110
+    versionName = "1.0.1.10"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
