@@ -60,14 +60,35 @@ importers:
 
   packages/ui-kit: {}
 
+  services/catalog:
+    dependencies:
+      '@storepoint/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@storepoint/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@storepoint/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
+      fastify:
+        specifier: ^5.2.1
+        version: 5.12.8
+
   services/gateway:
     dependencies:
+      '@storepoint/catalog-service':
+        specifier: workspace:*
+        version: link:../catalog
       '@storepoint/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@storepoint/identity-service':
         specifier: workspace:*
         version: link:../identity
+      '@storepoint/inventory-service':
+        specifier: workspace:*
+        version: link:../inventory
       '@storepoint/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
@@ -76,6 +97,21 @@ importers:
         version: 5.12.8
 
   services/identity:
+    dependencies:
+      '@storepoint/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@storepoint/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@storepoint/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
+      fastify:
+        specifier: ^5.2.1
+        version: 5.12.8
+
+  services/inventory:
     dependencies:
       '@storepoint/contracts':
         specifier: workspace:*

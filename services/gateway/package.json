@@ -11,8 +11,10 @@
     }
   },
   "dependencies": {
+    "@storepoint/catalog-service": "workspace:*",
     "@storepoint/contracts": "workspace:*",
     "@storepoint/identity-service": "workspace:*",
+    "@storepoint/inventory-service": "workspace:*",
     "@storepoint/service-kit": "workspace:*",
     "fastify": "^5.2.1"
   },

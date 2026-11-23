@@ -38,3 +38,6 @@ export function createErpShellConfig(options: {
     navigation: ERP_NAVIGATION_SECTIONS
   });
 }
+
+export * from "./catalog-inventory-view.js";
+
