@@ -121,4 +121,75 @@ describe("@storepoint/finance-crm-service — Customer AR Credit Ledger & Genera
     expect(recRes.statusCode).toBe(200);
     expect(recRes.json().data.entry.floatDeltaMinor).toBe(0);
   });
+
+  it("Enforces balanced double-entry journals and computes real-time Profit & Loss (P&L), Gross Margin, and Tax Payable", async () => {
+    const { app } = buildFinanceCrmService();
+    const orgId = "org_fin_gl_01";
+
+    // 1. Reject unbalanced journal entry (debits !== credits)
+    const unbalRes = await app.inject({
+      method: "POST",
+      url: "/v1/accounting/journals",
+      payload: {
+        organizationId: orgId,
+        currencyCode: "USD",
+        referenceType: "MANUAL_JOURNAL",
+        referenceId: "MAN-1",
+        description: "Unbalanced Entry",
+        lines: [
+          { accountCode: "1000_CASH_AND_BANK", debitMinor: 5000, creditMinor: 0 },
+          { accountCode: "4000_SALES_REVENUE", debitMinor: 0, creditMinor: 4000 }
+        ]
+      }
+    });
+    expect(unbalRes.statusCode).toBe(400);
+    expect(unbalRes.json().error.code).toBe("ERR_UNBALANCED_JOURNAL");
+
+    // 2. Post Sale + COGS Journal (Net Sales = $200.00, Tax = $24.00, COGS = $120.00 -> Gross Profit = $80.00 / 40% margin)
+    const saleGlRes = await app.inject({
+      method: "POST",
+      url: "/v1/accounting/journals/sale",
+      payload: {
+        organizationId: orgId,
+        currencyCode: "USD",
+        saleId: "sal_101",
+        netSalesMinor: 20000,
+        taxMinor: 2400,
+        cogsMinor: 12000
+      }
+    });
+    expect(saleGlRes.statusCode).toBe(201);
+
+    // 3. Post Operating Expense Journal ($30.00 Utilities)
+    await app.inject({
+      method: "POST",
+      url: "/v1/accounting/journals",
+      payload: {
+        organizationId: orgId,
+        currencyCode: "USD",
+        referenceType: "OPERATING_EXPENSE",
+        referenceId: "ovh_1",
+        description: "Store Electricity Bill",
+        lines: [
+          { accountCode: "6000_OPERATING_EXPENSES", debitMinor: 3000, creditMinor: 0 },
+          { accountCode: "1000_CASH_AND_BANK", debitMinor: 0, creditMinor: 3000 }
+        ]
+      }
+    });
+
+    // 4. Generate P&L Report -> Gross Profit = $80.00 (8000 minor), Gross Margin = 4000 bps (40%), Net Profit = $50.00 (5000 minor), Tax Payable = $24.00 (2400 minor)
+    const pnlRes = await app.inject({
+      method: "GET",
+      url: `/v1/accounting/reports/pnl?organizationId=${orgId}&currencyCode=USD`
+    });
+    expect(pnlRes.statusCode).toBe(200);
+    const pnl = pnlRes.json().data;
+    expect(pnl.salesRevenueMinor).toBe(20000);
+    expect(pnl.cogsMinor).toBe(12000);
+    expect(pnl.grossProfitMinor).toBe(8000);
+    expect(pnl.grossMarginBps).toBe(4000);
+    expect(pnl.operatingExpensesMinor).toBe(3000);
+    expect(pnl.netProfitMinor).toBe(5000);
+    expect(pnl.taxPayableMinor).toBe(2400);
+  });
 });

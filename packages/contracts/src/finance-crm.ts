@@ -101,3 +101,52 @@ export interface ReconcileFloatAccountInput {
   readonly actorUserId: string;
   readonly notes?: string;
 }
+
+export type GlAccountCode =
+  | "1000_CASH_AND_BANK"
+  | "1100_ACCOUNTS_RECEIVABLE"
+  | "1200_INVENTORY_ASSET"
+  | "1300_DIGITAL_FLOAT_ASSET"
+  | "2000_ACCOUNTS_PAYABLE"
+  | "2100_TAX_PAYABLE"
+  | "3000_OWNERS_EQUITY"
+  | "4000_SALES_REVENUE"
+  | "4100_DIGITAL_SERVICE_INCOME"
+  | "5000_COST_OF_GOODS_SOLD"
+  | "6000_OPERATING_EXPENSES";
+
+export interface GlJournalLineDto {
+  readonly accountCode: GlAccountCode;
+  readonly debitMinor: number;
+  readonly creditMinor: number;
+  readonly memo?: string;
+}
+
+export interface GlJournalEntryDto {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly branchId: string | null;
+  readonly currencyCode: string;
+  readonly referenceType: "POS_SALE" | "FLOAT_SERVICE" | "OPERATING_EXPENSE" | "MANUAL_JOURNAL";
+  readonly referenceId: string;
+  readonly description: string;
+  readonly lines: readonly GlJournalLineDto[];
+  readonly occurredAt: string;
+}
+
+export interface ProfitAndLossReportDto {
+  readonly organizationId: string;
+  readonly currencyCode: string;
+  readonly salesRevenueMinor: number;
+  readonly digitalServiceIncomeMinor: number;
+  readonly totalRevenueMinor: number;
+  readonly cogsMinor: number;
+  readonly grossProfitMinor: number;
+  /** Gross profit margin in basis points (e.g. 3500 = 35.00%) */
+  readonly grossMarginBps: number;
+  readonly operatingExpensesMinor: number;
+  readonly netProfitMinor: number;
+  readonly taxPayableMinor: number;
+  readonly journalEntryCount: number;
+}
+

@@ -1,6 +1,7 @@
 import type {
   ExecuteBomRepackagingInput,
   ExecuteStocktakeInput,
+  ExecuteWarehouseTransferInput,
   RecordStockMovementInput,
   ServiceHealthDto,
   SetReorderPointInput
@@ -113,6 +114,15 @@ export function registerInventoryRoutes(
   app.post<{ Body: ExecuteBomRepackagingInput }>("/v1/bom/repackage", async (req, reply) => {
     try {
       const res = await domain.executeBomRepackaging(req.body);
+      return reply.code(201).send(ok(res));
+    } catch (err) {
+      return handleInventoryError(err, reply);
+    }
+  });
+
+  app.post<{ Body: ExecuteWarehouseTransferInput }>("/v1/transfers", async (req, reply) => {
+    try {
+      const res = await domain.transferBetweenWarehouses(req.body);
       return reply.code(201).send(ok(res));
     } catch (err) {
       return handleInventoryError(err, reply);

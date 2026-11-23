@@ -3,11 +3,13 @@ import type {
   BomRepackagingResultDto,
   ExecuteBomRepackagingInput,
   ExecuteStocktakeInput,
+  ExecuteWarehouseTransferInput,
   RecordStockMovementInput,
   SetReorderPointInput,
   StockBalanceDto,
   StockMovementDto,
-  WarehouseDto
+  WarehouseDto,
+  WarehouseTransferResultDto
 } from "@storepoint/contracts";
 import { Money, calculateWeightedAverageCost } from "@storepoint/money";
 import { type EventBus, createDomainEvent } from "@storepoint/service-kit";
@@ -310,6 +312,73 @@ export class InventoryDomainService {
       consumedMovements: Object.freeze(consumedMovements),
       producedMovement,
       finishedBalance
+    });
+  }
+
+  /**
+   * Multi-Branch / Multi-Warehouse Stock Transfer.
+   * Atomically deducts stock from source warehouse (`TRANSFER_OUT`) and credits destination
+   * warehouse (`TRANSFER_IN`) at the source warehouse's exact Weighted Average Cost (WAC).
+   */
+  async transferBetweenWarehouses(
+    input: ExecuteWarehouseTransferInput
+  ): Promise<WarehouseTransferResultDto> {
+    if (input.sourceWarehouseId === input.destinationWarehouseId) {
+      throw new InventoryDomainError(
+        "ERR_SAME_WAREHOUSE_TRANSFER",
+        "Source and destination warehouses must be different"
+      );
+    }
+    if (input.quantityBaseUnits <= 0) {
+      throw new InventoryDomainError(
+        "ERR_INVALID_TRANSFER_QTY",
+        "Transfer quantity must be positive"
+      );
+    }
+
+    const sourceBal = await this.repo.getBalance(
+      input.organizationId,
+      input.sourceWarehouseId,
+      input.productId
+    );
+    const sourceWacMinor = sourceBal?.wacUnitCostMinor ?? 0;
+    const transferId = `trf_${randomUUID()}`;
+
+    const { movement: outboundMovement, balance: sourceBalance } = await this.recordMovement({
+      organizationId: input.organizationId,
+      warehouseId: input.sourceWarehouseId,
+      productId: input.productId,
+      currencyCode: input.currencyCode,
+      reason: "TRANSFER_OUT",
+      deltaBaseUnits: -input.quantityBaseUnits,
+      referenceId: transferId,
+      actorUserId: input.actorUserId,
+      notes: input.notes ?? `Transfer out to ${input.destinationWarehouseId}`
+    });
+
+    const { movement: inboundMovement, balance: destinationBalance } =
+      await this.recordMovement({
+        organizationId: input.organizationId,
+        warehouseId: input.destinationWarehouseId,
+        productId: input.productId,
+        currencyCode: input.currencyCode,
+        reason: "TRANSFER_IN",
+        deltaBaseUnits: input.quantityBaseUnits,
+        unitCostMinor: sourceWacMinor,
+        referenceId: transferId,
+        actorUserId: input.actorUserId,
+        notes: input.notes ?? `Transfer in from ${input.sourceWarehouseId}`
+      });
+
+    return Object.freeze({
+      transferId,
+      productId: input.productId,
+      quantityBaseUnits: input.quantityBaseUnits,
+      transferredUnitCostMinor: sourceWacMinor,
+      outboundMovement,
+      inboundMovement,
+      sourceBalance,
+      destinationBalance
     });
   }
 

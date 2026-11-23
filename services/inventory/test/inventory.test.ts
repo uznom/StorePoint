@@ -259,5 +259,36 @@ describe("@storepoint/inventory-service — Immutable Stock Ledger, WAC, FEFO Ex
     expect(
       (await repo.getBalance(orgId, warehouseId, "prd_bulk_rice_kg"))?.quantityOnHandBase
     ).toBe(50);
+
+    // Multi-Branch Stock Transfer: Transfer 20 x 1kg retail rice packs to Branch 2 Warehouse at 41.00 WAC
+    const wh2Res = await app.inject({
+      method: "POST",
+      url: "/v1/warehouses",
+      payload: {
+        organizationId: orgId,
+        branchId: "br_02",
+        code: "WH-BR2",
+        name: "Branch 2 Storefront"
+      }
+    });
+    const wh2Id = wh2Res.json().data.id as string;
+
+    const trfRes = await app.inject({
+      method: "POST",
+      url: "/v1/transfers",
+      payload: {
+        organizationId: orgId,
+        sourceWarehouseId: warehouseId,
+        destinationWarehouseId: wh2Id,
+        productId: "prd_retail_rice_1kg",
+        quantityBaseUnits: 20,
+        currencyCode: "PHP",
+        actorUserId: "usr_owner"
+      }
+    });
+    expect(trfRes.statusCode).toBe(201);
+    expect(trfRes.json().data.sourceBalance.quantityOnHandBase).toBe(30);
+    expect(trfRes.json().data.destinationBalance.quantityOnHandBase).toBe(20);
+    expect(trfRes.json().data.destinationBalance.wacUnitCostMinor).toBe(4100);
   });
 });

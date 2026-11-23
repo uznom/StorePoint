@@ -130,3 +130,26 @@ export interface BomRepackagingResultDto {
   readonly finishedBalance: StockBalanceDto;
 }
 
+export interface ExecuteWarehouseTransferInput {
+  readonly organizationId: string;
+  readonly sourceWarehouseId: string;
+  readonly destinationWarehouseId: string;
+  readonly productId: string;
+  readonly quantityBaseUnits: number;
+  readonly currencyCode: string;
+  readonly actorUserId: string;
+  readonly notes?: string;
+}
+
+export interface WarehouseTransferResultDto {
+  readonly transferId: string;
+  readonly productId: string;
+  readonly quantityBaseUnits: number;
+  readonly transferredUnitCostMinor: number;
+  readonly outboundMovement: StockMovementDto;
+  readonly inboundMovement: StockMovementDto;
+  readonly sourceBalance: StockBalanceDto;
+  readonly destinationBalance: StockBalanceDto;
+}
+
+

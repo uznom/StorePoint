@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ERP_NAVIGATION_SECTIONS,
   buildErpCatalogInventoryOverview,
+  buildErpExecutivePnlView,
   buildErpFinanceCrmView,
   buildErpPurchasingAndBomView,
   createErpShellConfig
@@ -173,5 +174,30 @@ describe("@storepoint/erp-web — Material 3 Expressive Back-Office ERP Shell & 
     expect(vm.activeCreditCustomersCount).toBe(1);
     expect(vm.m3eTemplateHtml).toContain("Lola Nena");
     expect(vm.m3eTemplateHtml).toContain("GCash E-Wallet");
+  });
+
+  it("Renders matraic/m3e Executive Profit & Loss (P&L) & Multi-Branch Stock Transfer dashboard view", () => {
+    const vm = buildErpExecutivePnlView({
+      report: {
+        organizationId: "org_1",
+        currencyCode: "USD",
+        salesRevenueMinor: 500000,
+        digitalServiceIncomeMinor: 25000,
+        totalRevenueMinor: 525000,
+        cogsMinor: 315000,
+        grossProfitMinor: 210000,
+        grossMarginBps: 4000,
+        operatingExpensesMinor: 60000,
+        netProfitMinor: 150000,
+        taxPayableMinor: 42000,
+        journalEntryCount: 18
+      }
+    });
+
+    expect(vm.grossProfitFormatted).toBe("$2,100.00");
+    expect(vm.netProfitFormatted).toBe("$1,500.00");
+    expect(vm.grossMarginPercent).toBe("40.00%");
+    expect(vm.taxPayableFormatted).toBe("$420.00");
+    expect(vm.m3eTemplateHtml).toContain("Net Operating Profit");
   });
 });
