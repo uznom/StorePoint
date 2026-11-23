@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StorePoint Global Showcase Mart — StorePoint ERP</title>
+  <style>
+:root {
+  --m3e-color-primary: #006C4C;
+  --m3e-color-on-primary: #FFFFFF;
+  --m3e-color-primary-container: #89F8C7;
+  --m3e-color-on-primary-container: #002114;
+  --m3e-color-secondary: #4D6357;
+  --m3e-color-on-secondary: #FFFFFF;
+  --m3e-color-secondary-container: #CFE9D9;
+  --m3e-color-on-secondary-container: #092016;
+  --m3e-color-tertiary: #3D6373;
+  --m3e-color-on-tertiary: #FFFFFF;
+  --m3e-color-surface: #F5FBF5;
+  --m3e-color-surface-container: #E9EFEA;
+  --m3e-color-surface-container-high: #E3EAE4;
+  --m3e-color-on-surface: #171D1A;
+  --m3e-color-on-surface-variant: #404943;
+  --m3e-color-outline: #707973;
+  --m3e-color-error: #BA1A1A;
+  --m3e-shape-corner-extra-large: 28px;
+  --m3e-shape-corner-large: 16px;
+  --m3e-shape-corner-medium: 12px;
+  --m3e-motion-spring-fast: cubic-bezier(0.22, 1.25, 0.36, 1);
+}
+    body { font-family: system-ui, sans-serif; background: var(--m3e-color-surface); color: var(--m3e-color-on-surface); margin: 0; padding: 24px; }
+    .sp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; margin-top: 20px; }
+    m3e-card { display: block; background: var(--m3e-color-surface-container); border-radius: var(--m3e-shape-corner-large); padding: 16px; margin-bottom: 12px; }
+    m3e-badge, m3e-chip { display: inline-block; background: var(--m3e-color-primary-container); color: var(--m3e-color-on-primary-container); padding: 4px 10px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
+    m3e-button { display: inline-block; background: var(--m3e-color-primary); color: var(--m3e-color-on-primary); padding: 8px 16px; border-radius: 999px; font-weight: 600; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header><h1>StorePoint Global Showcase Mart — StorePoint ERP</h1><p>7/7 Decoupled Microservices Active • Material 3 Expressive (matraic/m3e)</p></header>
+  <div class="sp-grid">
+<section class="sp-m3e-executive-pnl">
+  <header class="sp-m3e-kpi-row">
+    <m3e-card variant="filled"><span>Total Revenue</span><strong>$24.00</strong></m3e-card>
+    <m3e-card variant="filled"><span>Cost of Goods Sold (COGS)</span><strong>$13.50</strong></m3e-card>
+    <m3e-card variant="elevated"><span>Gross Profit</span><strong>$10.50</strong><m3e-badge>43.75%</m3e-badge></m3e-card>
+    <m3e-card variant="elevated"><span>Net Operating Profit</span><strong>$10.50</strong></m3e-card>
+    <m3e-card variant="tonal"><span>Tax Payable</span><strong>$0.00</strong></m3e-card>
+  </header>
+  <div class="sp-transfer-list"></div>
+</section>
+<section class="sp-m3e-inventory-dashboard">
+  <header class="sp-m3e-kpi-row">
+    <m3e-card variant="filled"><span class="label">Active SKUs</span><strong>1</strong></m3e-card>
+    <m3e-card variant="filled"><span class="label">Total Inventory Valuation (WAC)</span><strong>$202.50</strong></m3e-card>
+    <m3e-card variant="tonal" data-alert="low-stock"><span class="label">Low-Stock Alerts</span><strong>0</strong></m3e-card>
+    <m3e-card variant="tonal" data-alert="expiring"><span class="label">Expiring Batches (FEFO)</span><strong>0</strong></m3e-card>
+  </header>
+  <div class="sp-m3e-product-grid">
+<m3e-card variant="elevated" class="sp-product-card" data-sku="COF-ARABICA">
+  <div class="sp-card-header">
+    <h3>Arabica Roast Coffee</h3>
+    <m3e-badge>45 bag</m3e-badge>
+  </div>
+  <p class="sp-wac">WAC Unit Cost: <strong>$4.50</strong></p>
+  <m3e-chip-set><m3e-chip variant="assist" data-barcode="89010001001">250g Bag (x1)</m3e-chip><m3e-chip variant="assist" data-barcode="89010001012">12-Bag Case (x12)</m3e-chip></m3e-chip-set>
+</m3e-card>
+  </div>
+</section>
+<main class="sp-m3e-pos-terminal" data-online="true">
+  <header class="sp-pos-topbar">
+    <h2>Register 1</h2>
+    <m3e-chip variant="assist" data-status="online">Online</m3e-chip>
+    <m3e-badge data-parked="0">Parked: 0</m3e-badge>
+    <m3e-badge data-outbox="0">Outbox: 0</m3e-badge>
+  </header>
+  <section class="sp-pos-cart"><m3e-card variant="outlined" class="sp-pos-line" data-line="l1"><span>Arabica Roast Coffee <m3e-chip variant="input">250g Bag (x1)</m3e-chip></span><strong>2 × $8.00 = $16.00</strong></m3e-card></section>
+  <footer class="sp-pos-checkout">
+    <div class="sp-pos-total">Total Due: <strong>$16.00</strong></div>
+    <m3e-button variant="tonal" data-action="park-cart">Hold / Park</m3e-button>
+    <m3e-button variant="filled" data-action="charge">Charge ($16.00)</m3e-button>
+  </footer>
+</main>
+<section class="sp-m3e-customer-display" data-items="2">
+  <header class="sp-cfd-header">
+    <h2>Welcome to StorePoint Global Showcase Mart</h2>
+    <m3e-badge>Register 1</m3e-badge>
+  </header>
+  <div class="sp-cfd-lines"><m3e-card variant="filled" class="sp-cfd-item"><span>Arabica Roast Coffee <m3e-chip variant="assist">250g Bag</m3e-chip></span><strong>2 × $8.00 = $16.00</strong></m3e-card></div>
+  <footer class="sp-cfd-footer">
+    <div class="sp-cfd-total"><span>Total to Pay (2 items)</span><h1>$16.00</h1></div>
+    <m3e-card variant="outlined" class="sp-cfd-qr" data-qr="storepoint://pay?merchant=StorePoint%20Global%20Showcase%20Mart&currency=USD&amountMinor=1600">Scan to Pay via Instant QR</m3e-card>
+  </footer>
+</section>
+<section class="sp-m3e-purchasing-bom">
+  <header class="sp-m3e-kpi-row">
+    <m3e-card variant="filled"><span>Open POs</span><strong>1</strong></m3e-card>
+    <m3e-card variant="filled"><span>Unpaid AP & Overheads</span><strong>$0.00</strong></m3e-card>
+  </header>
+  <div class="sp-po-list"><m3e-card variant="elevated" class="sp-po-card" data-po="PO-00001"><h4>PO-00001 — Global Harvest Roasters</h4><m3e-badge>ORDERED</m3e-badge><p>Total Landed: <strong>$108.00</strong></p></m3e-card></div>
+  <div class="sp-bom-list"></div>
+  <div class="sp-ap-calendar"></div>
+</section>
+<section class="sp-m3e-finance-crm">
+  <header class="sp-m3e-kpi-row">
+    <m3e-card variant="filled"><span>Total Accounts Receivable (AR)</span><strong>$0.00</strong></m3e-card>
+    <m3e-card variant="filled"><span>Total Digital Float Balance</span><strong>$1,000.00</strong></m3e-card>
+  </header>
+  <div class="sp-ar-grid"><m3e-card variant="elevated" class="sp-customer-ar-card" data-customer="cus_b47066e1-7870-48b2-9f97-b08f6a430d15"><h4>Elena Martinez</h4><m3e-badge>0 pts</m3e-badge><p>Balance: <strong>$0.00</strong> / Limit: $500.00</p></m3e-card></div>
+  <div class="sp-float-grid"><m3e-card variant="tonal" class="sp-float-card" data-provider="MOBILE_TOPUP"><h4>Global Airtime & Bill Pay Float (AIRTIME_LOAD)</h4><strong>$1,000.00</strong><m3e-chip variant="assist">Fee: $1.00</m3e-chip></m3e-card></div>
+</section>
+<section class="sp-shelf-label-sheet">
+<article class="sp-shelf-label" data-sku="COF-ARABICA" data-barcode="89010001001"><div class="sp-label-store">StorePoint Global Showcase Mart</div><div class="sp-label-name">Arabica Roast Coffee <span class="sp-label-uom">(250g Bag)</span></div><div class="sp-label-price">$8.00</div><div class="sp-label-barcode"><svg class="sp-barcode-svg" viewBox="0 0 132 52" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="4" width="6" height="36" fill="#171D1A"/><rect x="14" y="4" width="4" height="36" fill="#171D1A"/><rect x="20" y="4" width="2" height="36" fill="#171D1A"/><rect x="24" y="4" width="4" height="36" fill="#171D1A"/><rect x="30" y="4" width="2" height="36" fill="#171D1A"/><rect x="34" y="4" width="4" height="36" fill="#171D1A"/><rect x="40" y="4" width="4" height="36" fill="#171D1A"/><rect x="46" y="4" width="4" height="36" fill="#171D1A"/><rect x="52" y="4" width="2" height="36" fill="#171D1A"/><rect x="56" y="4" width="4" height="36" fill="#171D1A"/><rect x="62" y="4" width="2" height="36" fill="#171D1A"/><rect x="66" y="4" width="4" height="36" fill="#171D1A"/><rect x="72" y="4" width="2" height="36" fill="#171D1A"/><rect x="76" y="4" width="4" height="36" fill="#171D1A"/><rect x="82" y="4" width="4" height="36" fill="#171D1A"/><rect x="88" y="4" width="4" height="36" fill="#171D1A"/><rect x="94" y="4" width="2" height="36" fill="#171D1A"/><rect x="98" y="4" width="4" height="36" fill="#171D1A"/><rect x="104" y="4" width="2" height="36" fill="#171D1A"/><rect x="108" y="4" width="4" height="36" fill="#171D1A"/><rect x="114" y="4" width="4" height="36" fill="#171D1A"/><rect x="120" y="4" width="4" height="36" fill="#171D1A"/><text x="50%" y="49" text-anchor="middle" font-size="9" font-family="monospace">89010001001</text></svg></div></article>
+<article class="sp-shelf-label" data-sku="COF-ARABICA" data-barcode="89010001012"><div class="sp-label-store">StorePoint Global Showcase Mart</div><div class="sp-label-name">Arabica Roast Coffee <span class="sp-label-uom">(12-Bag Case)</span></div><div class="sp-label-price">$90.00</div><div class="sp-label-barcode"><svg class="sp-barcode-svg" viewBox="0 0 136 52" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="4" width="6" height="36" fill="#171D1A"/><rect x="14" y="4" width="4" height="36" fill="#171D1A"/><rect x="20" y="4" width="2" height="36" fill="#171D1A"/><rect x="24" y="4" width="4" height="36" fill="#171D1A"/><rect x="30" y="4" width="2" height="36" fill="#171D1A"/><rect x="34" y="4" width="4" height="36" fill="#171D1A"/><rect x="40" y="4" width="4" height="36" fill="#171D1A"/><rect x="46" y="4" width="4" height="36" fill="#171D1A"/><rect x="52" y="4" width="2" height="36" fill="#171D1A"/><rect x="56" y="4" width="4" height="36" fill="#171D1A"/><rect x="62" y="4" width="2" height="36" fill="#171D1A"/><rect x="66" y="4" width="4" height="36" fill="#171D1A"/><rect x="72" y="4" width="2" height="36" fill="#171D1A"/><rect x="76" y="4" width="4" height="36" fill="#171D1A"/><rect x="82" y="4" width="4" height="36" fill="#171D1A"/><rect x="88" y="4" width="4" height="36" fill="#171D1A"/><rect x="94" y="4" width="2" height="36" fill="#171D1A"/><rect x="98" y="4" width="4" height="36" fill="#171D1A"/><rect x="104" y="4" width="4" height="36" fill="#171D1A"/><rect x="110" y="4" width="4" height="36" fill="#171D1A"/><rect x="116" y="4" width="6" height="36" fill="#171D1A"/><rect x="124" y="4" width="4" height="36" fill="#171D1A"/><text x="50%" y="49" text-anchor="middle" font-size="9" font-family="monospace">89010001012</text></svg></div></article>
+</section>
+<section class="sp-m3e-extensions-hub">
+  <header class="sp-m3e-kpi-row">
+    <m3e-card variant="filled"><span>Global Country Packs</span><strong>5</strong></m3e-card>
+    <m3e-card variant="filled"><span>v1 Migrated SKUs</span><strong>0</strong></m3e-card>
+  </header>
+  <div class="sp-country-pack-grid"><m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-ph-retail">
+  <h4>Philippines Sari-Sari & Mini-Mart Pack (PH)</h4>
+  <m3e-chip variant="assist">PHP • BIR TIN</m3e-chip>
+  <m3e-badge>4 Float Presets</m3e-badge>
+  <m3e-button variant="filled">Activate Pack</m3e-button>
+</m3e-card>
+<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-in-kirana">
+  <h4>India Kirana GST & UPI Pack (IN)</h4>
+  <m3e-chip variant="assist">INR • GSTIN</m3e-chip>
+  <m3e-badge>2 Float Presets</m3e-badge>
+  <m3e-button variant="filled">Activate Pack</m3e-button>
+</m3e-card>
+<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-ke-duka">
+  <h4>Kenya Duka & M-Pesa Agent Pack (KE)</h4>
+  <m3e-chip variant="assist">KES • KRA PIN</m3e-chip>
+  <m3e-badge>2 Float Presets</m3e-badge>
+  <m3e-button variant="filled">Activate Pack</m3e-button>
+</m3e-card>
+<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-mx-abarrotes">
+  <h4>Mexico Tienda de Abarrotes Pack (MX)</h4>
+  <m3e-chip variant="assist">MXN • RFC</m3e-chip>
+  <m3e-badge>1 Float Presets</m3e-badge>
+  <m3e-button variant="filled">Activate Pack</m3e-button>
+</m3e-card>
+<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-us-general">
+  <h4>United States Small Retail & Bodega Pack (US)</h4>
+  <m3e-chip variant="assist">USD • EIN</m3e-chip>
+  <m3e-badge>0 Float Presets</m3e-badge>
+  <m3e-button variant="filled">Activate Pack</m3e-button>
+</m3e-card></div>
+</section>
+  </div>
+</body>
+</html>

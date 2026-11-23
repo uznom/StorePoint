@@ -8,7 +8,7 @@ import { extname, join, relative } from "node:path";
 
 const HARD_CEILING = 799;
 const SOFT_WARNING = 400;
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".css", ".html"]);
+const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".css", ".html", ".kt", ".kts"]);
 const IGNORED_DIRS = new Set([
   "node_modules",
   "dist",

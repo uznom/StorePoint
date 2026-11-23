@@ -4,6 +4,13 @@ dist/
 build/
 coverage/
 .turbo/
+.gradle/
+.kotlin/
+app/build/
+local.properties
+*.keystore
+*.jks
+
 
 # Environment & Secrets
 .env

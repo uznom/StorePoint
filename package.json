@@ -14,6 +14,8 @@
     "test": "vitest run",
     "typecheck": "corepack pnpm -r run typecheck",
     "check:limits": "node scripts/check-line-limits.mjs",
+    "export:portal": "node scripts/export-v2-portal.mjs",
+    "build:apk": "corepack pnpm build && node scripts/export-v2-portal.mjs && ./gradlew assembleDebug assembleRelease",
     "verify": "node scripts/check-line-limits.mjs && corepack pnpm -r run build && corepack pnpm -r run typecheck && vitest run"
   },
   "devDependencies": {
