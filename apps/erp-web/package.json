@@ -1,0 +1,17 @@
+{
+  "name": "@storepoint/erp-web",
+  "version": "2.0.0-alpha.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@storepoint/contracts": "workspace:*",
+    "@storepoint/money": "workspace:*",
+    "@storepoint/ui-kit": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  }
+}

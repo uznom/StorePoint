@@ -1,80 +1,53 @@
-name: Code Quality & Security Audit
+name: StorePoint v2 — Code Quality, <800 Line Ceiling & Security Gate
 
 on:
   push:
     branches:
       - main
-      - master
+      - v2
   pull_request:
     branches:
       - main
-      - master
+      - v2
   workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
-  code-quality:
-    name: Android Lint & Secret Safety Check
+  verify:
+    name: Line Ceiling (<800), Typecheck, Tests & Secret Scan
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v6
+      - name: Set up Node.js 22 & Corepack
+        uses: actions/setup-node@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          node-version: "22"
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Prepare Environment, Keystores & Local Properties
+      - name: Enable Corepack & Install Dependencies
         run: |
-          chmod +x gradlew
-          # Create local.properties with Android SDK path
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          # Create .env file from example if it doesn't exist
-          if [ ! -f ".env" ]; then
-            cp .env.example .env
-          fi
-          # Ensure local debug keystore is present for signing debugConfig
-          if [ ! -f "debug.keystore" ]; then
-            echo "Generating clean debug.keystore for CI build..."
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          corepack enable
+          corepack pnpm install --frozen-lockfile
+
+      - name: Enforce < 800 Lines per File Ceiling
+        run: node scripts/check-line-limits.mjs
 
       - name: Secrets & Leak Prevention Audit
         run: |
-          echo "Checking for accidental tracking of sensitive files or private keys..."
-          # Verify no production keystores or private key formats are tracked
           LEAKED_KEYS=$(git ls-files | grep -E '\.(jks|keystore|pem|pk8|key)$' || true)
           if [ -n "$LEAKED_KEYS" ]; then
             echo "::error::Leaked key material found in git tracking: $LEAKED_KEYS"
             exit 1
           fi
-
-          # Verify no .env files containing credentials are tracked
           LEAKED_ENV=$(git ls-files | grep -E '(^|/)\.env$' || true)
           if [ -n "$LEAKED_ENV" ]; then
             echo "::error::Active .env file found tracked in git: $LEAKED_ENV"
             exit 1
           fi
 
-          echo "Zero leaked credentials or tracked keys detected. Security audit PASSED."
-
-      - name: Run Android Lint
-        run: ./gradlew :app:lintDebug --stacktrace
-
-      - name: Upload Lint Analysis Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-lint-report
-          path: app/build/reports/lint-results-debug.*
+      - name: Build, Typecheck & Run Test Suite
+        run: corepack pnpm verify
