@@ -53,6 +53,8 @@ export * from "./inventory.js";
 export * from "./pos.js";
 export * from "./purchasing.js";
 export * from "./finance-crm.js";
+export * from "./extensions.js";
+
 
 
 

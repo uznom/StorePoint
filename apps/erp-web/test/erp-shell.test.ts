@@ -3,6 +3,7 @@ import {
   ERP_NAVIGATION_SECTIONS,
   buildErpCatalogInventoryOverview,
   buildErpExecutivePnlView,
+  buildErpExtensionsAndMigrationView,
   buildErpFinanceCrmView,
   buildErpPurchasingAndBomView,
   createErpShellConfig
@@ -199,5 +200,27 @@ describe("@storepoint/erp-web — Material 3 Expressive Back-Office ERP Shell & 
     expect(vm.grossMarginPercent).toBe("40.00%");
     expect(vm.taxPayableFormatted).toBe("$420.00");
     expect(vm.m3eTemplateHtml).toContain("Net Operating Profit");
+  });
+
+  it("Renders matraic/m3e Global Country Pack Marketplace & v1 Migration view", () => {
+    const vm = buildErpExtensionsAndMigrationView({
+      countryPacks: [
+        {
+          packId: "pack-ph-retail",
+          name: "Philippines Sari-Sari & Mini-Mart Pack",
+          region: "Southeast Asia",
+          countryCode: "PH",
+          defaultCurrencyCode: "PHP",
+          taxIdLabel: "BIR TIN",
+          defaultTaxRules: [],
+          floatTemplates: []
+        }
+      ],
+      activePackIds: ["pack-ph-retail"]
+    });
+
+    expect(vm.availablePacksCount).toBe(1);
+    expect(vm.m3eTemplateHtml).toContain("Philippines Sari-Sari & Mini-Mart Pack (PH)");
+    expect(vm.m3eTemplateHtml).toContain("Installed");
   });
 });

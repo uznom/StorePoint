@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildGatewayService } from "../src/index.js";
 
 describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Catalog, Inventory & POS", () => {
-  it("Reports 6 active microservices (identity, catalog, inventory, pos, purchasing, finance-crm) and injects correlation IDs", async () => {
+  it("Reports all 7 decoupled microservices online (identity, catalog, inventory, pos, purchasing, finance-crm, extensions)", async () => {
     const { gateway } = buildGatewayService();
 
     const healthRes = await gateway.inject({ method: "GET", url: "/health" });
@@ -14,7 +14,7 @@ describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Cat
     const online = body.data.upstreamServices.filter(
       (s: { status: string }) => s.status === "online"
     );
-    expect(online).toHaveLength(6);
+    expect(online).toHaveLength(7);
   });
 
   it("Executes end-to-end onboarding -> product creation -> initial stock -> POS multi-UOM sale -> event-driven inventory deduction -> return restock", async () => {
@@ -256,5 +256,13 @@ describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Cat
     });
     expect(arChargeRes.statusCode).toBe(201);
     expect(arChargeRes.json().data.customer.currentCreditBalanceMinor).toBe(25000);
+
+    // Phase 6 E2E: List Global Country Packs via Gateway
+    const packsRes = await gateway.inject({
+      method: "GET",
+      url: "/api/v1/extensions/country-packs"
+    });
+    expect(packsRes.statusCode).toBe(200);
+    expect(packsRes.json().data.length).toBeGreaterThanOrEqual(5);
   });
 });

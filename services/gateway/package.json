@@ -13,6 +13,7 @@
   "dependencies": {
     "@storepoint/catalog-service": "workspace:*",
     "@storepoint/contracts": "workspace:*",
+    "@storepoint/extensions-service": "workspace:*",
     "@storepoint/finance-crm-service": "workspace:*",
     "@storepoint/identity-service": "workspace:*",
     "@storepoint/inventory-service": "workspace:*",

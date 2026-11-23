@@ -8,6 +8,7 @@ import type {
   ExecuteBomRepackagingInput,
   ExecuteFloatTransactionInput,
   FloatServiceCategory,
+  LegacyV1BackupPayload,
   PaymentTermsCode,
   PinAuthInput,
   ProcessPosReturnInput,
@@ -16,6 +17,7 @@ import type {
   RecordStockMovementInput,
   ServiceHealthDto
 } from "@storepoint/contracts";
+import { buildExtensionsService } from "@storepoint/extensions-service";
 import { buildFinanceCrmService } from "@storepoint/finance-crm-service";
 import { buildIdentityService } from "@storepoint/identity-service";
 import { buildInventoryService } from "@storepoint/inventory-service";
@@ -48,6 +50,7 @@ export function buildGatewayService(): {
   pos: ReturnType<typeof buildPosService>;
   purchasing: ReturnType<typeof buildPurchasingService>;
   financeCrm: ReturnType<typeof buildFinanceCrmService>;
+  extensions: ReturnType<typeof buildExtensionsService>;
 } {
   const eventBus = new InMemoryEventBus();
   const identity = buildIdentityService({ eventBus });
@@ -56,6 +59,7 @@ export function buildGatewayService(): {
   const pos = buildPosService({ eventBus });
   const purchasing = buildPurchasingService({ eventBus });
   const financeCrm = buildFinanceCrmService({ eventBus });
+  const extensions = buildExtensionsService();
   const gateway = Fastify({ logger: false });
 
   gateway.addHook("onRequest", async (req, reply) => {
@@ -82,7 +86,7 @@ export function buildGatewayService(): {
         { name: "pos-service", phase: "Phase 2", status: "online" },
         { name: "purchasing-service", phase: "Phase 3", status: "online" },
         { name: "finance-crm-service", phase: "Phase 4", status: "online" },
-        { name: "extensions-service", phase: "Phase 6", status: "planned" }
+        { name: "extensions-service", phase: "Phase 6", status: "online" }
       ]
     };
     return ok(status);
@@ -335,5 +339,39 @@ export function buildGatewayService(): {
     }
   );
 
-  return { gateway, eventBus, identity, catalog, inventory, pos, purchasing, financeCrm };
+  // Extensions & v1 Migration routes
+  gateway.get("/api/v1/extensions/country-packs", async (_req, reply) => {
+    const upstream = await extensions.app.inject({
+      method: "GET",
+      url: "/v1/country-packs"
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{
+    Body: {
+      organizationId: string;
+      currencyCode?: string;
+      backup: LegacyV1BackupPayload;
+    };
+  }>("/api/v1/extensions/migrations/v1-import", async (req, reply) => {
+    const upstream = await extensions.app.inject({
+      method: "POST",
+      url: "/v1/migrations/v1-import",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  return {
+    gateway,
+    eventBus,
+    identity,
+    catalog,
+    inventory,
+    pos,
+    purchasing,
+    financeCrm,
+    extensions
+  };
 }
