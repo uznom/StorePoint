@@ -48,6 +48,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui-kit
 
+  apps/print-bridge:
+    dependencies:
+      '@storepoint/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@storepoint/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+
   packages/contracts: {}
 
   packages/money: {}
@@ -89,6 +98,9 @@ importers:
       '@storepoint/inventory-service':
         specifier: workspace:*
         version: link:../inventory
+      '@storepoint/pos-service':
+        specifier: workspace:*
+        version: link:../pos
       '@storepoint/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
@@ -112,6 +124,21 @@ importers:
         version: 5.12.8
 
   services/inventory:
+    dependencies:
+      '@storepoint/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@storepoint/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@storepoint/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
+      fastify:
+        specifier: ^5.2.1
+        version: 5.12.8
+
+  services/pos:
     dependencies:
       '@storepoint/contracts':
         specifier: workspace:*

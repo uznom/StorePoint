@@ -1,6 +1,7 @@
 import { type EventBus, InMemoryEventBus } from "@storepoint/service-kit";
 import Fastify, { type FastifyInstance } from "fastify";
 import { InventoryDomainService } from "./domain/inventory-service.js";
+import { registerInventoryEventConsumers } from "./events/pos-event-consumers.js";
 import {
   InMemoryInventoryRepository,
   type InventoryRepository
@@ -24,9 +25,11 @@ export function buildInventoryService(options: BuildInventoryServerOptions = {})
   const app = Fastify({ logger: false });
 
   registerInventoryRoutes(app, domain);
+  registerInventoryEventConsumers(eventBus, domain);
   return { app, domain, repo, eventBus };
 }
 
 export * from "./domain/inventory-service.js";
+export * from "./events/pos-event-consumers.js";
 export * from "./repositories/inventory-repository.js";
 export * from "./routes/inventory-routes.js";

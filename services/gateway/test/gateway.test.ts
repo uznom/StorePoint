@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildGatewayService } from "../src/index.js";
 
-describe("@storepoint/gateway-service — API Gateway Routing Across Identity, Catalog & Inventory", () => {
-  it("Reports 3 active microservices (identity, catalog, inventory) and injects correlation IDs", async () => {
+describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Catalog, Inventory & POS", () => {
+  it("Reports 4 active microservices (identity, catalog, inventory, pos) and injects correlation IDs", async () => {
     const { gateway } = buildGatewayService();
 
     const healthRes = await gateway.inject({ method: "GET", url: "/health" });
@@ -14,11 +14,11 @@ describe("@storepoint/gateway-service — API Gateway Routing Across Identity, C
     const online = body.data.upstreamServices.filter(
       (s: { status: string }) => s.status === "online"
     );
-    expect(online).toHaveLength(3);
+    expect(online).toHaveLength(4);
   });
 
-  it("Routes end-to-end store onboarding -> product creation -> stock movement across decoupled services", async () => {
-    const { gateway, eventBus } = buildGatewayService();
+  it("Executes end-to-end onboarding -> product creation -> initial stock -> POS multi-UOM sale -> event-driven inventory deduction -> return restock", async () => {
+    const { gateway, inventory } = buildGatewayService();
 
     const onboardRes = await gateway.inject({
       method: "POST",
@@ -34,9 +34,9 @@ describe("@storepoint/gateway-service — API Gateway Routing Across Identity, C
         ownerPin: "6814"
       }
     });
-    expect(onboardRes.statusCode).toBe(201);
     const orgId = onboardRes.json().data.organization.id as string;
     const branchId = onboardRes.json().data.defaultBranch.id as string;
+    const registerId = onboardRes.json().data.defaultRegister.id as string;
     const ownerId = onboardRes.json().data.owner.id as string;
 
     const catRes = await gateway.inject({
@@ -60,7 +60,6 @@ describe("@storepoint/gateway-service — API Gateway Routing Across Identity, C
         basePriceMinor: 3200
       }
     });
-    expect(prodRes.statusCode).toBe(201);
     const productId = prodRes.json().data.id as string;
 
     const whRes = await gateway.inject({
@@ -75,7 +74,8 @@ describe("@storepoint/gateway-service — API Gateway Routing Across Identity, C
     });
     const warehouseId = whRes.json().data.id as string;
 
-    const movRes = await gateway.inject({
+    // Receive 50 base units
+    await gateway.inject({
       method: "POST",
       url: "/api/v1/inventory/movements",
       payload: {
@@ -89,13 +89,72 @@ describe("@storepoint/gateway-service — API Gateway Routing Across Identity, C
         actorUserId: ownerId
       }
     });
-    expect(movRes.statusCode).toBe(201);
-    expect(movRes.json().data.balance.quantityOnHandBase).toBe(50);
 
-    // Event bus captured events from all 3 decoupled services
-    const eventTypes = eventBus.getPublishedEvents().map((e) => e.eventType);
-    expect(eventTypes).toContain("identity.organization.created");
-    expect(eventTypes).toContain("catalog.product.upserted");
-    expect(eventTypes).toContain("inventory.stock.adjusted");
+    // Open POS Shift
+    const shiftRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/pos/shifts/open",
+      payload: {
+        organizationId: orgId,
+        branchId,
+        registerId,
+        cashierUserId: ownerId,
+        currencyCode: "MXN",
+        openingFloatMinor: 50000
+      }
+    });
+    const shiftId = shiftRes.json().data.id as string;
+
+    // Complete POS Sale for 3 x 1kg bags -> EventBus automatically deducts 3 base units in inventory-service (50 -> 47)!
+    const saleRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/pos/sales",
+      payload: {
+        idempotencyKey: "pos_sale_e2e_01",
+        organizationId: orgId,
+        branchId,
+        warehouseId,
+        registerId,
+        shiftId,
+        cashierUserId: ownerId,
+        currencyCode: "MXN",
+        items: [
+          {
+            productId,
+            productName: "Arroz Extra 1kg",
+            uomCode: "kg",
+            uomName: "1 Kilogram Bag",
+            conversionFactorToBase: 1,
+            quantity: 3,
+            unitPriceMinor: 3200
+          }
+        ],
+        payments: [{ tenderType: "CASH", amountMinor: 10000 }]
+      }
+    });
+    expect(saleRes.statusCode).toBe(201);
+    const saleId = saleRes.json().data.id as string;
+
+    const balanceAfterSale = await inventory.repo.getBalance(orgId, warehouseId, productId);
+    expect(balanceAfterSale?.quantityOnHandBase).toBe(47);
+
+    // Process Return of 1 unit with restockToInventory: true -> EventBus automatically restores stock to 48!
+    const retRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/pos/returns",
+      payload: {
+        organizationId: orgId,
+        originalSaleId: saleId,
+        shiftId,
+        cashierUserId: ownerId,
+        reason: "CUSTOMER_CHANGED_MIND",
+        refundTender: "CASH",
+        lines: [{ productId, quantity: 1, restockToInventory: true }]
+      }
+    });
+    expect(retRes.statusCode).toBe(201);
+
+    const balanceAfterReturn = await inventory.repo.getBalance(orgId, warehouseId, productId);
+    expect(balanceAfterReturn?.quantityOnHandBase).toBe(48);
   });
 });

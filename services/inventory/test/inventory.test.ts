@@ -119,4 +119,71 @@ describe("@storepoint/inventory-service — Immutable Stock Ledger, WAC, FEFO Ex
     expect(expRes.json().data).toHaveLength(1);
     expect(expRes.json().data[0].batchNumber).toBe("LOT-2026-A");
   });
+
+  it("Consumes pos.sale.completed and pos.sale.returned events from EventBus to deduct and restock base units", async () => {
+    const { app, eventBus, repo } = buildInventoryService();
+    const orgId = "org_inv_evt";
+
+    const whRes = await app.inject({
+      method: "POST",
+      url: "/v1/warehouses",
+      payload: {
+        organizationId: orgId,
+        branchId: "br_01",
+        code: "WH-EVT",
+        name: "Event Warehouse"
+      }
+    });
+    const warehouseId = whRes.json().data.id as string;
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/movements",
+      payload: {
+        organizationId: orgId,
+        warehouseId,
+        productId: "prd_tea",
+        currencyCode: "USD",
+        reason: "INITIAL_STOCK",
+        deltaBaseUnits: 20,
+        unitCostMinor: 300,
+        actorUserId: "usr_owner"
+      }
+    });
+
+    await eventBus.publish({
+      eventId: "evt_sale_1",
+      eventType: "pos.sale.completed",
+      organizationId: orgId,
+      branchId: "br_01",
+      occurredAt: new Date().toISOString(),
+      correlationId: "corr_1",
+      payload: {
+        saleId: "sal_1",
+        warehouseId,
+        currencyCode: "USD",
+        cashierUserId: "usr_cashier",
+        items: [{ productId: "prd_tea", baseUnitsDeducted: 5 }]
+      }
+    });
+    expect((await repo.getBalance(orgId, warehouseId, "prd_tea"))?.quantityOnHandBase).toBe(15);
+
+    await eventBus.publish({
+      eventId: "evt_ret_1",
+      eventType: "pos.sale.returned",
+      organizationId: orgId,
+      branchId: "br_01",
+      occurredAt: new Date().toISOString(),
+      correlationId: "corr_2",
+      payload: {
+        returnId: "ret_1",
+        originalSaleId: "sal_1",
+        warehouseId,
+        currencyCode: "USD",
+        cashierUserId: "usr_cashier",
+        lines: [{ productId: "prd_tea", baseUnitsReturned: 2, restockToInventory: true }]
+      }
+    });
+    expect((await repo.getBalance(orgId, warehouseId, "prd_tea"))?.quantityOnHandBase).toBe(17);
+  });
 });

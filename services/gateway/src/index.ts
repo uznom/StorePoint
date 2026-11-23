@@ -1,15 +1,18 @@
 import { buildCatalogService } from "@storepoint/catalog-service";
 import type {
+  CompletePosSaleInput,
   CreateCategoryInput,
   CreateOrganizationInput,
   CreateProductInput,
   CreateUserInput,
   PinAuthInput,
+  ProcessPosReturnInput,
   RecordStockMovementInput,
   ServiceHealthDto
 } from "@storepoint/contracts";
 import { buildIdentityService } from "@storepoint/identity-service";
 import { buildInventoryService } from "@storepoint/inventory-service";
+import { buildPosService } from "@storepoint/pos-service";
 import { InMemoryEventBus, ok } from "@storepoint/service-kit";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -25,7 +28,7 @@ export interface GatewayTopologyStatus {
 
 /**
  * Decoupled API Gateway & Auth Edge.
- * Routes traffic across independent domain services (`identity`, `catalog`, `inventory`)
+ * Routes traffic across independent domain services (`identity`, `catalog`, `inventory`, `pos`)
  * connected via the shared EventBus.
  */
 export function buildGatewayService(): {
@@ -34,11 +37,13 @@ export function buildGatewayService(): {
   identity: ReturnType<typeof buildIdentityService>;
   catalog: ReturnType<typeof buildCatalogService>;
   inventory: ReturnType<typeof buildInventoryService>;
+  pos: ReturnType<typeof buildPosService>;
 } {
   const eventBus = new InMemoryEventBus();
   const identity = buildIdentityService({ eventBus });
   const catalog = buildCatalogService({ eventBus });
   const inventory = buildInventoryService({ eventBus });
+  const pos = buildPosService({ eventBus });
   const gateway = Fastify({ logger: false });
 
   gateway.addHook("onRequest", async (req, reply) => {
@@ -62,7 +67,7 @@ export function buildGatewayService(): {
         { name: "identity-service", phase: "Phase 0", status: "online" },
         { name: "catalog-service", phase: "Phase 1", status: "online" },
         { name: "inventory-service", phase: "Phase 1", status: "online" },
-        { name: "pos-service", phase: "Phase 2", status: "planned" },
+        { name: "pos-service", phase: "Phase 2", status: "online" },
         { name: "purchasing-service", phase: "Phase 3", status: "planned" },
         { name: "finance-crm-service", phase: "Phase 4", status: "planned" },
         { name: "extensions-service", phase: "Phase 6", status: "planned" }
@@ -156,5 +161,42 @@ export function buildGatewayService(): {
     }
   );
 
-  return { gateway, eventBus, identity, catalog, inventory };
+  // POS routes
+  gateway.post<{
+    Body: {
+      organizationId: string;
+      branchId: string;
+      registerId: string;
+      cashierUserId: string;
+      currencyCode: string;
+      openingFloatMinor: number;
+    };
+  }>("/api/v1/pos/shifts/open", async (req, reply) => {
+    const upstream = await pos.app.inject({
+      method: "POST",
+      url: "/v1/shifts/open",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{ Body: CompletePosSaleInput }>("/api/v1/pos/sales", async (req, reply) => {
+    const upstream = await pos.app.inject({
+      method: "POST",
+      url: "/v1/sales",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{ Body: ProcessPosReturnInput }>("/api/v1/pos/returns", async (req, reply) => {
+    const upstream = await pos.app.inject({
+      method: "POST",
+      url: "/v1/returns",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  return { gateway, eventBus, identity, catalog, inventory, pos };
 }
