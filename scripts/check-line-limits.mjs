@@ -14,6 +14,7 @@ const IGNORED_DIRS = new Set([
   "dist",
   "build",
   "coverage",
+  "assets",
   ".git",
   ".turbo",
   ".agents"

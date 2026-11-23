@@ -1,153 +1,1411 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>StorePoint Global Showcase Mart — StorePoint ERP</title>
+  <title>StorePoint — Offline-First POS & Small-Store ERP</title>
   <style>
 :root {
-  --m3e-color-primary: #006C4C;
-  --m3e-color-on-primary: #FFFFFF;
-  --m3e-color-primary-container: #89F8C7;
-  --m3e-color-on-primary-container: #002114;
-  --m3e-color-secondary: #4D6357;
-  --m3e-color-on-secondary: #FFFFFF;
-  --m3e-color-secondary-container: #CFE9D9;
-  --m3e-color-on-secondary-container: #092016;
-  --m3e-color-tertiary: #3D6373;
-  --m3e-color-on-tertiary: #FFFFFF;
-  --m3e-color-surface: #F5FBF5;
-  --m3e-color-surface-container: #E9EFEA;
-  --m3e-color-surface-container-high: #E3EAE4;
-  --m3e-color-on-surface: #171D1A;
-  --m3e-color-on-surface-variant: #404943;
-  --m3e-color-outline: #707973;
-  --m3e-color-error: #BA1A1A;
-  --m3e-shape-corner-extra-large: 28px;
-  --m3e-shape-corner-large: 16px;
-  --m3e-shape-corner-medium: 12px;
-  --m3e-motion-spring-fast: cubic-bezier(0.22, 1.25, 0.36, 1);
+  --sp-primary: #2D55D6;
+  --sp-on-primary: #FFFFFF;
+  --sp-primary-container: #DEE6FF;
+  --sp-on-primary-container: #16233F;
+  --sp-secondary: #4D6DE8;
+  --sp-secondary-container: #EAF0FF;
+  --sp-on-secondary-container: #2B2A6B;
+  --sp-tertiary: #7C3AED;
+  --sp-tertiary-container: #F1E8FF;
+  --sp-on-tertiary-container: #4A148C;
+  --sp-bg: #F6F8FC;
+  --sp-surface: #FFFFFF;
+  --sp-surface-low: #F6F8FC;
+  --sp-surface-container: #EEF2F8;
+  --sp-surface-high: #E6EBF4;
+  --sp-surface-highest: #DCE2EE;
+  --sp-text: #0F172A;
+  --sp-text-muted: #475569;
+  --sp-outline: #B9C2D4;
+  --sp-outline-variant: #DEE3EE;
+  --sp-cash: #16A34A;
+  --sp-cash-bg: #DCFCE7;
+  --sp-gcash: #007DFE;
+  --sp-gcash-bg: #E0F2FE;
+  --sp-maya: #00B4D8;
+  --sp-maya-bg: #CFFAFE;
+  --sp-load: #7C3AED;
+  --sp-load-bg: #F3E8FF;
+  --sp-credit: #D97706;
+  --sp-credit-bg: #FEF3C7;
+  --sp-danger: #DC2626;
+  --sp-danger-bg: #FEE2E2;
+  --sp-spring: cubic-bezier(0.22, 1.25, 0.36, 1);
 }
-    body { font-family: system-ui, sans-serif; background: var(--m3e-color-surface); color: var(--m3e-color-on-surface); margin: 0; padding: 24px; }
-    .sp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; margin-top: 20px; }
-    m3e-card { display: block; background: var(--m3e-color-surface-container); border-radius: var(--m3e-shape-corner-large); padding: 16px; margin-bottom: 12px; }
-    m3e-badge, m3e-chip { display: inline-block; background: var(--m3e-color-primary-container); color: var(--m3e-color-on-primary-container); padding: 4px 10px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
-    m3e-button { display: inline-block; background: var(--m3e-color-primary); color: var(--m3e-color-on-primary); padding: 8px 16px; border-radius: 999px; font-weight: 600; cursor: pointer; }
-  </style>
+
+[data-theme="dark"] {
+  --sp-primary: #819EFE;
+  --sp-on-primary: #08122E;
+  --sp-primary-container: #1E293B;
+  --sp-on-primary-container: #E0E7FF;
+  --sp-secondary: #A5B9FF;
+  --sp-secondary-container: #172033;
+  --sp-on-secondary-container: #F8FAFC;
+  --sp-tertiary: #C4B5FD;
+  --sp-tertiary-container: #3B0764;
+  --sp-on-tertiary-container: #F3E8FF;
+  --sp-bg: #020617;
+  --sp-surface: #0B0F19;
+  --sp-surface-low: #0B0F19;
+  --sp-surface-container: #0F172A;
+  --sp-surface-high: #1E293B;
+  --sp-surface-highest: #334155;
+  --sp-text: #F8FAFC;
+  --sp-text-muted: #94A3B8;
+  --sp-outline: #334155;
+  --sp-outline-variant: #1E293B;
+  --sp-cash-bg: #14532D;
+  --sp-gcash-bg: #0C4A6E;
+  --sp-maya-bg: #164E63;
+  --sp-load-bg: #3B0764;
+  --sp-credit-bg: #78350F;
+  --sp-danger-bg: #7F1D1D;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--sp-bg);
+  color: var(--sp-text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Kiosk Top Status Bar */
+.sp-kiosk-bar {
+  background: var(--sp-surface);
+  border-bottom: 1px solid var(--sp-outline-variant);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+.sp-brand { display: flex; align-items: center; gap: 12px; }
+.sp-brand-logo {
+  width: 40px; height: 40px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--sp-primary), var(--sp-tertiary));
+  color: #fff; font-weight: 800; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(45, 85, 214, 0.28);
+}
+.sp-brand-title { font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
+.sp-brand-sub { font-size: 12px; color: var(--sp-text-muted); }
+
+/* Animated Pill Navigation Bar */
+.sp-nav-pills {
+  display: flex; gap: 6px; background: var(--sp-surface-container);
+  padding: 5px; border-radius: 999px; flex-wrap: wrap;
+}
+.sp-nav-btn {
+  border: none; background: transparent; color: var(--sp-text-muted);
+  padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 13px;
+  cursor: pointer; transition: all 0.22s var(--sp-spring);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.sp-nav-btn:hover { color: var(--sp-text); background: var(--sp-surface-high); }
+.sp-nav-btn.active {
+  background: var(--sp-primary); color: var(--sp-on-primary);
+  transform: scale(1.03);
+  box-shadow: 0 3px 10px rgba(45, 85, 214, 0.25);
+}
+
+/* Expressive Morphing Buttons (Pill <-> Squircle on press) */
+.sp-btn {
+  border: none; border-radius: 999px; padding: 10px 18px;
+  font-weight: 700; font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: transform 0.18s var(--sp-spring), border-radius 0.18s var(--sp-spring), background 0.15s;
+  min-height: 42px;
+}
+.sp-btn:active { transform: scale(0.95); border-radius: 12px; }
+.sp-btn-primary { background: var(--sp-primary); color: var(--sp-on-primary); }
+.sp-btn-tonal { background: var(--sp-primary-container); color: var(--sp-on-primary-container); }
+.sp-btn-outline { background: transparent; color: var(--sp-text); border: 1.5px solid var(--sp-outline); }
+.sp-btn-cash { background: var(--sp-cash); color: #fff; }
+.sp-btn-gcash { background: var(--sp-gcash); color: #fff; }
+.sp-btn-maya { background: var(--sp-maya); color: #fff; }
+.sp-btn-load { background: var(--sp-load); color: #fff; }
+.sp-btn-credit { background: var(--sp-credit); color: #fff; }
+.sp-btn-danger { background: var(--sp-danger); color: #fff; }
+.sp-btn-sm { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+
+/* Expressive Cards & Badges */
+.sp-card {
+  background: var(--sp-surface);
+  border: 1px solid var(--sp-outline-variant);
+  border-radius: 24px;
+  padding: 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+.sp-card-tonal {
+  background: var(--sp-surface-container);
+  border-radius: 22px;
+  padding: 16px;
+}
+.sp-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
+}
+.sp-badge-success { background: var(--sp-cash-bg); color: var(--sp-cash); }
+.sp-badge-warn { background: var(--sp-credit-bg); color: var(--sp-credit); }
+.sp-badge-danger { background: var(--sp-danger-bg); color: var(--sp-danger); }
+.sp-badge-info { background: var(--sp-gcash-bg); color: var(--sp-gcash); }
+.sp-badge-purple { background: var(--sp-load-bg); color: var(--sp-load); }
+
+/* POS Split Layout */
+.sp-pos-layout {
+  display: grid;
+  grid-template-columns: 1fr 410px;
+  gap: 18px;
+  padding: 18px 20px;
+  flex: 1;
+  align-items: start;
+}
+@media (max-width: 1024px) {
+  .sp-pos-layout { grid-template-columns: 1fr; }
+}
+.sp-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.sp-prod-card {
+  background: var(--sp-surface);
+  border: 1.5px solid var(--sp-outline-variant);
+  border-radius: 22px;
+  padding: 14px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  gap: 10px;
+  transition: transform 0.18s var(--sp-spring), border-color 0.18s;
+}
+.sp-prod-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--sp-primary);
+}
+.sp-uom-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-uom-btn {
+  border: 1px solid var(--sp-outline);
+  background: var(--sp-surface-low);
+  color: var(--sp-text);
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-size: 11px; font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s var(--sp-spring);
+}
+.sp-uom-btn:hover, .sp-uom-btn.active {
+  background: var(--sp-primary-container);
+  color: var(--sp-on-primary-container);
+  border-color: var(--sp-primary);
+}
+
+/* Inputs & Modals */
+.sp-input, .sp-select {
+  width: 100%; padding: 11px 14px; border-radius: 16px;
+  border: 1.5px solid var(--sp-outline);
+  background: var(--sp-surface); color: var(--sp-text);
+  font-size: 14px; font-weight: 500;
+}
+.sp-input:focus, .sp-select:focus {
+  outline: none; border-color: var(--sp-primary);
+}
+.sp-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+  z-index: 100; padding: 16px;
+}
+.sp-modal-backdrop.open { display: flex; }
+.sp-modal {
+  background: var(--sp-surface);
+  border-radius: 28px;
+  max-width: 560px; width: 100%;
+  max-height: 90vh; overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--sp-outline-variant);
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.35);
+}
+.sp-receipt-paper {
+  font-family: 'Courier New', Courier, monospace;
+  background: #fffdf7; color: #111;
+  padding: 18px; border-radius: 12px;
+  border: 1px dashed #94a3b8;
+  white-space: pre-wrap; font-size: 12.5px; line-height: 1.45;
+}
+.sp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px; margin-bottom: 18px;
+}
+.sp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sp-table th, .sp-table td {
+  padding: 10px 12px; text-align: left;
+  border-bottom: 1px solid var(--sp-outline-variant);
+}
+.sp-table th { font-weight: 700; color: var(--sp-text-muted); font-size: 11px; text-transform: uppercase; }
+</style>
 </head>
 <body>
-  <header><h1>StorePoint Global Showcase Mart — StorePoint ERP</h1><p>7/7 Decoupled Microservices Active • Material 3 Expressive (matraic/m3e)</p></header>
-  <div class="sp-grid">
-<section class="sp-m3e-executive-pnl">
-  <header class="sp-m3e-kpi-row">
-    <m3e-card variant="filled"><span>Total Revenue</span><strong>$24.00</strong></m3e-card>
-    <m3e-card variant="filled"><span>Cost of Goods Sold (COGS)</span><strong>$13.50</strong></m3e-card>
-    <m3e-card variant="elevated"><span>Gross Profit</span><strong>$10.50</strong><m3e-badge>43.75%</m3e-badge></m3e-card>
-    <m3e-card variant="elevated"><span>Net Operating Profit</span><strong>$10.50</strong></m3e-card>
-    <m3e-card variant="tonal"><span>Tax Payable</span><strong>$0.00</strong></m3e-card>
-  </header>
-  <div class="sp-transfer-list"></div>
-</section>
-<section class="sp-m3e-inventory-dashboard">
-  <header class="sp-m3e-kpi-row">
-    <m3e-card variant="filled"><span class="label">Active SKUs</span><strong>1</strong></m3e-card>
-    <m3e-card variant="filled"><span class="label">Total Inventory Valuation (WAC)</span><strong>$202.50</strong></m3e-card>
-    <m3e-card variant="tonal" data-alert="low-stock"><span class="label">Low-Stock Alerts</span><strong>0</strong></m3e-card>
-    <m3e-card variant="tonal" data-alert="expiring"><span class="label">Expiring Batches (FEFO)</span><strong>0</strong></m3e-card>
-  </header>
-  <div class="sp-m3e-product-grid">
-<m3e-card variant="elevated" class="sp-product-card" data-sku="COF-ARABICA">
-  <div class="sp-card-header">
-    <h3>Arabica Roast Coffee</h3>
-    <m3e-badge>45 bag</m3e-badge>
+
+<!-- Top Kiosk & Navigation Bar -->
+<header class="sp-kiosk-bar">
+  <div class="sp-brand">
+    <div class="sp-brand-logo">SP</div>
+    <div>
+      <div class="sp-brand-title" id="sp-store-title">StorePoint Sari-Sari & Mini-Mart</div>
+      <div class="sp-brand-sub" id="sp-store-subtitle">Main Counter • Terminal 01 • 7/7 Microservices Online</div>
+    </div>
   </div>
-  <p class="sp-wac">WAC Unit Cost: <strong>$4.50</strong></p>
-  <m3e-chip-set><m3e-chip variant="assist" data-barcode="89010001001">250g Bag (x1)</m3e-chip><m3e-chip variant="assist" data-barcode="89010001012">12-Bag Case (x12)</m3e-chip></m3e-chip-set>
-</m3e-card>
+
+  <nav class="sp-nav-pills" role="tablist">
+    <button class="sp-nav-btn active" onclick="SP.switchTab('pos')" id="tab-btn-pos">🛒 Cashier POS</button>
+    <button class="sp-nav-btn" onclick="SP.switchTab('float')" id="tab-btn-float">📱 GCash / Float Hub</button>
+    <button class="sp-nav-btn" onclick="SP.switchTab('inventory')" id="tab-btn-inventory">📦 Inventory & BOM</button>
+    <button class="sp-nav-btn" onclick="SP.switchTab('purchasing')" id="tab-btn-purchasing">🚚 Suppliers & POs</button>
+    <button class="sp-nav-btn" onclick="SP.switchTab('admin')" id="tab-btn-admin">📊 Admin ERP & P&L</button>
+    <button class="sp-nav-btn" onclick="SP.switchTab('cfd')" id="tab-btn-cfd">🖥️ CFD & Labels</button>
+  </nav>
+
+  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+    <select class="sp-select" style="width:auto; padding:7px 12px; font-size:12px; font-weight:700;" id="sp-pack-select" onchange="SP.switchCountryPack(this.value)">
+      <option value="pack-ph-retail">🇵🇭 PH • ₱ PHP (12% VAT)</option>
+      <option value="pack-us-general">🇺🇸 US • $ USD (8.25% Tax)</option>
+      <option value="pack-in-kirana">🇮🇳 IN • ₹ INR (18% GST)</option>
+      <option value="pack-ke-duka">🇰🇪 KE • KSh KES (16% VAT)</option>
+      <option value="pack-mx-abarrotes">🇲🇽 MX • Mex$ MXN (16% IVA)</option>
+    </select>
+    <button class="sp-btn sp-btn-tonal sp-btn-sm" onclick="SP.openPinModal()" id="sp-active-user-btn">👤 Jeff S. (ADMIN)</button>
+    <button class="sp-btn sp-btn-outline sp-btn-sm" onclick="SP.toggleTheme()" title="Toggle Light/Dark M3 Expressive Theme">🌗 Theme</button>
   </div>
-</section>
-<main class="sp-m3e-pos-terminal" data-online="true">
-  <header class="sp-pos-topbar">
-    <h2>Register 1</h2>
-    <m3e-chip variant="assist" data-status="online">Online</m3e-chip>
-    <m3e-badge data-parked="0">Parked: 0</m3e-badge>
-    <m3e-badge data-outbox="0">Outbox: 0</m3e-badge>
-  </header>
-  <section class="sp-pos-cart"><m3e-card variant="outlined" class="sp-pos-line" data-line="l1"><span>Arabica Roast Coffee <m3e-chip variant="input">250g Bag (x1)</m3e-chip></span><strong>2 × $8.00 = $16.00</strong></m3e-card></section>
-  <footer class="sp-pos-checkout">
-    <div class="sp-pos-total">Total Due: <strong>$16.00</strong></div>
-    <m3e-button variant="tonal" data-action="park-cart">Hold / Park</m3e-button>
-    <m3e-button variant="filled" data-action="charge">Charge ($16.00)</m3e-button>
-  </footer>
+</header>
+
+<!-- WORKSPACE 1: CASHIER POS TERMINAL -->
+<main id="view-pos" class="sp-pos-layout">
+  <section style="display:flex; flex-direction:column; gap:14px;">
+    <div class="sp-card" style="padding:14px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div style="display:flex; gap:8px; flex:1; min-width:240px;">
+        <input type="text" id="sp-pos-search" class="sp-input" placeholder="🔍 Scan barcode (e.g. 480001001) or search product / SKU..." oninput="SP.renderPosCatalog()" onkeydown="if(event.key==='Enter') SP.scanBarcodeInput(this.value)" />
+        <button class="sp-btn sp-btn-primary sp-btn-sm" onclick="SP.scanBarcodeInput(document.getElementById('sp-pos-search').value)">Scan</button>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="sp-btn sp-btn-tonal sp-btn-sm" onclick="SP.switchTab('float')">⚡ GCash / Maya / Load</button>
+        <button class="sp-btn sp-btn-outline sp-btn-sm" onclick="SP.openReturnModal()">🔁 Lookup / Return</button>
+      </div>
+    </div>
+
+    <div id="sp-pos-categories" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+    <div id="sp-pos-product-grid" class="sp-product-grid"></div>
+  </section>
+
+  <!-- Right Column: Active Shift Bar + Cart + Tender Actions -->
+  <aside class="sp-card" style="position:sticky; top:76px; display:flex; flex-direction:column; gap:14px;">
+    <div class="sp-card-tonal" style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px; font-weight:700; color:var(--sp-text-muted);" id="sp-shift-label">SHIFT ACTIVE • SHF-2026-01</div>
+        <div style="font-size:15px; font-weight:800;" id="sp-drawer-expected">Drawer Cash: ₱3,335.00</div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="sp-btn sp-btn-outline sp-btn-sm" onclick="SP.openPettyCashModal()">💵 In/Out</button>
+        <button class="sp-btn sp-btn-danger sp-btn-sm" onclick="SP.openBlindCloseModal()">🔒 End Shift</button>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h3 style="margin:0; font-size:16px;">🛒 Current Basket <span class="sp-badge sp-badge-info" id="sp-cart-count">0 items</span></h3>
+      <div style="display:flex; gap:6px;">
+        <button class="sp-btn sp-btn-tonal sp-btn-sm" onclick="SP.parkCurrentCart()" id="sp-park-btn">⏸️ Hold</button>
+        <button class="sp-btn sp-btn-outline sp-btn-sm" onclick="SP.clearCart()">🗑️ Clear</button>
+      </div>
+    </div>
+
+    <div id="sp-parked-banner"></div>
+    <div id="sp-cart-list" style="display:flex; flex-direction:column; gap:10px; max-height:310px; overflow-y:auto;"></div>
+
+    <div class="sp-card-tonal" style="display:flex; flex-direction:column; gap:6px; font-size:13px;">
+      <div style="display:flex; justify-content:space-between;"><span>Subtotal</span><strong id="sp-cart-subtotal">₱0.00</strong></div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Discount</span>
+        <input type="number" id="sp-cart-discount" class="sp-input" style="width:95px; padding:4px 8px; text-align:right;" value="0" min="0" oninput="SP.renderCart()" />
+      </div>
+      <div style="display:flex; justify-content:space-between;"><span id="sp-tax-label">Net VATable Sales</span><span id="sp-cart-net">₱0.00</span></div>
+      <div style="display:flex; justify-content:space-between;"><span id="sp-vat-rate-label">12% VAT</span><span id="sp-cart-tax">₱0.00</span></div>
+      <div style="display:flex; justify-content:space-between; font-size:20px; font-weight:800; padding-top:6px; border-top:1px solid var(--sp-outline);">
+        <span>TOTAL DUE</span><span id="sp-cart-total" style="color:var(--sp-primary);">₱0.00</span>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <button class="sp-btn sp-btn-cash" onclick="SP.openCheckoutModal('CASH')">💵 Cash Checkout</button>
+      <button class="sp-btn sp-btn-gcash" onclick="SP.openCheckoutModal('GCASH')">💙 GCash</button>
+      <button class="sp-btn sp-btn-maya" onclick="SP.openCheckoutModal('MAYA')">🩵 Maya / Card</button>
+      <button class="sp-btn sp-btn-credit" onclick="SP.openCheckoutModal('STORE_CREDIT')">📒 Charge Utang / AR</button>
+    </div>
+  </aside>
 </main>
-<section class="sp-m3e-customer-display" data-items="2">
-  <header class="sp-cfd-header">
-    <h2>Welcome to StorePoint Global Showcase Mart</h2>
-    <m3e-badge>Register 1</m3e-badge>
-  </header>
-  <div class="sp-cfd-lines"><m3e-card variant="filled" class="sp-cfd-item"><span>Arabica Roast Coffee <m3e-chip variant="assist">250g Bag</m3e-chip></span><strong>2 × $8.00 = $16.00</strong></m3e-card></div>
-  <footer class="sp-cfd-footer">
-    <div class="sp-cfd-total"><span>Total to Pay (2 items)</span><h1>$16.00</h1></div>
-    <m3e-card variant="outlined" class="sp-cfd-qr" data-qr="storepoint://pay?merchant=StorePoint%20Global%20Showcase%20Mart&currency=USD&amountMinor=1600">Scan to Pay via Instant QR</m3e-card>
-  </footer>
-</section>
-<section class="sp-m3e-purchasing-bom">
-  <header class="sp-m3e-kpi-row">
-    <m3e-card variant="filled"><span>Open POs</span><strong>1</strong></m3e-card>
-    <m3e-card variant="filled"><span>Unpaid AP & Overheads</span><strong>$0.00</strong></m3e-card>
-  </header>
-  <div class="sp-po-list"><m3e-card variant="elevated" class="sp-po-card" data-po="PO-00001"><h4>PO-00001 — Global Harvest Roasters</h4><m3e-badge>ORDERED</m3e-badge><p>Total Landed: <strong>$108.00</strong></p></m3e-card></div>
-  <div class="sp-bom-list"></div>
-  <div class="sp-ap-calendar"></div>
-</section>
-<section class="sp-m3e-finance-crm">
-  <header class="sp-m3e-kpi-row">
-    <m3e-card variant="filled"><span>Total Accounts Receivable (AR)</span><strong>$0.00</strong></m3e-card>
-    <m3e-card variant="filled"><span>Total Digital Float Balance</span><strong>$1,000.00</strong></m3e-card>
-  </header>
-  <div class="sp-ar-grid"><m3e-card variant="elevated" class="sp-customer-ar-card" data-customer="cus_b47066e1-7870-48b2-9f97-b08f6a430d15"><h4>Elena Martinez</h4><m3e-badge>0 pts</m3e-badge><p>Balance: <strong>$0.00</strong> / Limit: $500.00</p></m3e-card></div>
-  <div class="sp-float-grid"><m3e-card variant="tonal" class="sp-float-card" data-provider="MOBILE_TOPUP"><h4>Global Airtime & Bill Pay Float (AIRTIME_LOAD)</h4><strong>$1,000.00</strong><m3e-chip variant="assist">Fee: $1.00</m3e-chip></m3e-card></div>
-</section>
-<section class="sp-shelf-label-sheet">
-<article class="sp-shelf-label" data-sku="COF-ARABICA" data-barcode="89010001001"><div class="sp-label-store">StorePoint Global Showcase Mart</div><div class="sp-label-name">Arabica Roast Coffee <span class="sp-label-uom">(250g Bag)</span></div><div class="sp-label-price">$8.00</div><div class="sp-label-barcode"><svg class="sp-barcode-svg" viewBox="0 0 132 52" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="4" width="6" height="36" fill="#171D1A"/><rect x="14" y="4" width="4" height="36" fill="#171D1A"/><rect x="20" y="4" width="2" height="36" fill="#171D1A"/><rect x="24" y="4" width="4" height="36" fill="#171D1A"/><rect x="30" y="4" width="2" height="36" fill="#171D1A"/><rect x="34" y="4" width="4" height="36" fill="#171D1A"/><rect x="40" y="4" width="4" height="36" fill="#171D1A"/><rect x="46" y="4" width="4" height="36" fill="#171D1A"/><rect x="52" y="4" width="2" height="36" fill="#171D1A"/><rect x="56" y="4" width="4" height="36" fill="#171D1A"/><rect x="62" y="4" width="2" height="36" fill="#171D1A"/><rect x="66" y="4" width="4" height="36" fill="#171D1A"/><rect x="72" y="4" width="2" height="36" fill="#171D1A"/><rect x="76" y="4" width="4" height="36" fill="#171D1A"/><rect x="82" y="4" width="4" height="36" fill="#171D1A"/><rect x="88" y="4" width="4" height="36" fill="#171D1A"/><rect x="94" y="4" width="2" height="36" fill="#171D1A"/><rect x="98" y="4" width="4" height="36" fill="#171D1A"/><rect x="104" y="4" width="2" height="36" fill="#171D1A"/><rect x="108" y="4" width="4" height="36" fill="#171D1A"/><rect x="114" y="4" width="4" height="36" fill="#171D1A"/><rect x="120" y="4" width="4" height="36" fill="#171D1A"/><text x="50%" y="49" text-anchor="middle" font-size="9" font-family="monospace">89010001001</text></svg></div></article>
-<article class="sp-shelf-label" data-sku="COF-ARABICA" data-barcode="89010001012"><div class="sp-label-store">StorePoint Global Showcase Mart</div><div class="sp-label-name">Arabica Roast Coffee <span class="sp-label-uom">(12-Bag Case)</span></div><div class="sp-label-price">$90.00</div><div class="sp-label-barcode"><svg class="sp-barcode-svg" viewBox="0 0 136 52" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="4" width="6" height="36" fill="#171D1A"/><rect x="14" y="4" width="4" height="36" fill="#171D1A"/><rect x="20" y="4" width="2" height="36" fill="#171D1A"/><rect x="24" y="4" width="4" height="36" fill="#171D1A"/><rect x="30" y="4" width="2" height="36" fill="#171D1A"/><rect x="34" y="4" width="4" height="36" fill="#171D1A"/><rect x="40" y="4" width="4" height="36" fill="#171D1A"/><rect x="46" y="4" width="4" height="36" fill="#171D1A"/><rect x="52" y="4" width="2" height="36" fill="#171D1A"/><rect x="56" y="4" width="4" height="36" fill="#171D1A"/><rect x="62" y="4" width="2" height="36" fill="#171D1A"/><rect x="66" y="4" width="4" height="36" fill="#171D1A"/><rect x="72" y="4" width="2" height="36" fill="#171D1A"/><rect x="76" y="4" width="4" height="36" fill="#171D1A"/><rect x="82" y="4" width="4" height="36" fill="#171D1A"/><rect x="88" y="4" width="4" height="36" fill="#171D1A"/><rect x="94" y="4" width="2" height="36" fill="#171D1A"/><rect x="98" y="4" width="4" height="36" fill="#171D1A"/><rect x="104" y="4" width="4" height="36" fill="#171D1A"/><rect x="110" y="4" width="4" height="36" fill="#171D1A"/><rect x="116" y="4" width="6" height="36" fill="#171D1A"/><rect x="124" y="4" width="4" height="36" fill="#171D1A"/><text x="50%" y="49" text-anchor="middle" font-size="9" font-family="monospace">89010001012</text></svg></div></article>
-</section>
-<section class="sp-m3e-extensions-hub">
-  <header class="sp-m3e-kpi-row">
-    <m3e-card variant="filled"><span>Global Country Packs</span><strong>5</strong></m3e-card>
-    <m3e-card variant="filled"><span>v1 Migrated SKUs</span><strong>0</strong></m3e-card>
-  </header>
-  <div class="sp-country-pack-grid"><m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-ph-retail">
-  <h4>Philippines Sari-Sari & Mini-Mart Pack (PH)</h4>
-  <m3e-chip variant="assist">PHP • BIR TIN</m3e-chip>
-  <m3e-badge>4 Float Presets</m3e-badge>
-  <m3e-button variant="filled">Activate Pack</m3e-button>
-</m3e-card>
-<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-in-kirana">
-  <h4>India Kirana GST & UPI Pack (IN)</h4>
-  <m3e-chip variant="assist">INR • GSTIN</m3e-chip>
-  <m3e-badge>2 Float Presets</m3e-badge>
-  <m3e-button variant="filled">Activate Pack</m3e-button>
-</m3e-card>
-<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-ke-duka">
-  <h4>Kenya Duka & M-Pesa Agent Pack (KE)</h4>
-  <m3e-chip variant="assist">KES • KRA PIN</m3e-chip>
-  <m3e-badge>2 Float Presets</m3e-badge>
-  <m3e-button variant="filled">Activate Pack</m3e-button>
-</m3e-card>
-<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-mx-abarrotes">
-  <h4>Mexico Tienda de Abarrotes Pack (MX)</h4>
-  <m3e-chip variant="assist">MXN • RFC</m3e-chip>
-  <m3e-badge>1 Float Presets</m3e-badge>
-  <m3e-button variant="filled">Activate Pack</m3e-button>
-</m3e-card>
-<m3e-card variant="elevated" class="sp-country-pack-card" data-pack="pack-us-general">
-  <h4>United States Small Retail & Bodega Pack (US)</h4>
-  <m3e-chip variant="assist">USD • EIN</m3e-chip>
-  <m3e-badge>0 Float Presets</m3e-badge>
-  <m3e-button variant="filled">Activate Pack</m3e-button>
-</m3e-card></div>
-</section>
+
+<!-- WORKSPACE 2: DIGITAL SERVICES & FLOAT LEDGER HUB -->
+<main id="view-float" style="display:none; padding:20px; max-width:1360px; margin:0 auto; width:100%;">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+    <div>
+      <h2 style="margin:0;">📱 Digital Financial Services & Auditable Float Ledgers</h2>
+      <p style="margin:4px 0 0; color:var(--sp-text-muted); font-size:13px;">GCash Cash-In/Out, Maya Transfers, and Smart/Globe Prepaid Load with automated 2% retailer rebates and shift reconciliation.</p>
+    </div>
   </div>
+  <div id="sp-float-wallets-grid" class="sp-kpi-grid"></div>
+
+  <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px; align-items:start;">
+    <div class="sp-card">
+      <h3 style="margin-top:0;">⚡ Record Digital Service Transaction</h3>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <label style="font-size:12px; font-weight:700;">Wallet / Float Account</label>
+        <select id="sp-flt-wallet" class="sp-select"></select>
+        <label style="font-size:12px; font-weight:700;">Transaction Type</label>
+        <select id="sp-flt-type" class="sp-select">
+          <option value="CUSTOMER_CASH_IN">Customer Cash-In (Send Digital Float, Collect Cash)</option>
+          <option value="CUSTOMER_CASH_OUT">Customer Cash-Out (Receive Digital Float, Payout Cash)</option>
+          <option value="TOPUP_SALE">Prepaid Airtime / E-Load Sale (Auto +2% Retailer Rebate)</option>
+          <option value="OWNER_RELOAD">Owner Float Reload / Top-Up Wallet</option>
+        </select>
+        <label style="font-size:12px; font-weight:700;">Principal Amount</label>
+        <input type="number" id="sp-flt-amount" class="sp-input" value="500" min="1" />
+        <label style="font-size:12px; font-weight:700;">Customer Service Fee Collected</label>
+        <input type="number" id="sp-flt-fee" class="sp-input" value="10" min="0" />
+        <label style="font-size:12px; font-weight:700;">Customer Mobile / Reference No.</label>
+        <input type="text" id="sp-flt-ref" class="sp-input" placeholder="e.g. 0917-555-0199 or Ref #99182" />
+        <button class="sp-btn sp-btn-primary" onclick="SP.submitFloatTransaction()">Post to Auditable Float Ledger</button>
+      </div>
+    </div>
+    <div class="sp-card">
+      <h3 style="margin-top:0;">📜 Immutable Wallet Float Audit Ledger</h3>
+      <table class="sp-table" id="sp-float-ledger-table"></table>
+    </div>
+  </div>
+</main>
+
+<!-- WORKSPACE 3: INVENTORY PORTAL, PRICE CHECKER, STOCKTAKE & BULK BOM REPACKAGING -->
+<main id="view-inventory" style="display:none; padding:20px; max-width:1360px; margin:0 auto; width:100%;">
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-bottom:18px;">
+    <div class="sp-card">
+      <h3 style="margin-top:0;">⚙️ Bulk-to-Retail Repackaging BOM Engine</h3>
+      <p style="font-size:12.5px; color:var(--sp-text-muted); margin-top:0;">Convert bulk sacks/containers into retail packs with atomic raw deduction and exact Weighted Average Cost (WAC) valuation.</p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:11px; font-weight:700;">Raw Material Bulk SKU</label>
+          <select id="sp-bom-raw" class="sp-select"></select>
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:700;">Target Retail Pack SKU</label>
+          <select id="sp-bom-target" class="sp-select"></select>
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:700;">Raw Base Units to Consume (e.g. 50 kg)</label>
+          <input type="number" id="sp-bom-raw-qty" class="sp-input" value="50" min="1" />
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:700;">Retail Units Produced (e.g. 50 bags)</label>
+          <input type="number" id="sp-bom-out-qty" class="sp-input" value="50" min="1" />
+        </div>
+      </div>
+      <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:12px; color:var(--sp-text-muted);">Packaging Bag Cost: <strong>1.00 / unit</strong></span>
+        <button class="sp-btn sp-btn-primary" onclick="SP.executeBomConversion()">⚙️ Execute Atomic BOM Repackaging</button>
+      </div>
+    </div>
+
+    <div class="sp-card">
+      <h3 style="margin-top:0;">🏷️ Rapid Price Checker & New Multi-UOM Product</h3>
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <input type="text" id="sp-price-check-input" class="sp-input" placeholder="Scan or enter barcode (e.g. 480002010) to verify price..." oninput="SP.runPriceChecker(this.value)" />
+      </div>
+      <div id="sp-price-check-result" class="sp-card-tonal" style="min-height:86px; display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--sp-text-muted);">
+        Type or scan any barcode above to view all Multi-UOM tier prices & stock on hand.
+      </div>
+      <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+        <button class="sp-btn sp-btn-tonal sp-btn-sm" onclick="SP.openNewProductModal()">➕ Add New Multi-UOM Product</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sp-card" style="margin-bottom:18px;">
+    <h3 style="margin-top:0;">📦 Multi-UOM Product Catalog, WAC Valuation & Physical Stocktake Audit</h3>
+    <table class="sp-table" id="sp-inventory-table"></table>
+  </div>
+
+  <div class="sp-card">
+    <h3 style="margin-top:0;">📜 Immutable Stock Movement Ledger</h3>
+    <table class="sp-table" id="sp-stock-ledger-table"></table>
+  </div>
+</main>
+
+<!-- WORKSPACE 4: SUPPLIERS, PURCHASE ORDERS & OVERHEAD CALENDAR -->
+<main id="view-purchasing" style="display:none; padding:20px; max-width:1360px; margin:0 auto; width:100%;">
+  <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:18px;">
+    <div class="sp-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0;">🚚 Purchase Orders & Landed Cost Receiving</h3>
+        <button class="sp-btn sp-btn-tonal sp-btn-sm" onclick="SP.generateSmartReorderPo()">✨ Auto-Generate Low-Stock Draft PO</button>
+      </div>
+      <table class="sp-table" id="sp-po-table"></table>
+    </div>
+
+    <div class="sp-card">
+      <h3 style="margin-top:0;">🗓️ Store Overhead & Accounts Payable Calendar</h3>
+      <div id="sp-overhead-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+  </div>
+</main>
+
+<!-- WORKSPACE 5: ADMIN ERP, DOUBLE-ENTRY P&L, CUSTOMER CREDIT (AR) & V1 MIGRATION -->
+<main id="view-admin" style="display:none; padding:20px; max-width:1360px; margin:0 auto; width:100%;">
+  <div id="sp-admin-kpis" class="sp-kpi-grid"></div>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-bottom:18px;">
+    <div class="sp-card">
+      <h3 style="margin-top:0;">📒 Customer Credit (Utang / Accounts Receivable) Ledger</h3>
+      <table class="sp-table" id="sp-customers-ar-table"></table>
+    </div>
+    <div class="sp-card">
+      <h3 style="margin-top:0;">🧾 Recent Receipts & Item-Level Returns / Refunds</h3>
+      <table class="sp-table" id="sp-transactions-table"></table>
+    </div>
+  </div>
+
+  <div class="sp-card">
+    <h3 style="margin-top:0;">⚖️ Double-Entry General Ledger (Auto-Posted from Sales, COGS, VAT & Overheads)</h3>
+    <table class="sp-table" id="sp-gl-table"></table>
+  </div>
+</main>
+
+<!-- WORKSPACE 6: CUSTOMER-FACING DISPLAY (CFD) & PRINTABLE BARCODE SHELF LABELS -->
+<main id="view-cfd" style="display:none; padding:20px; max-width:1360px; margin:0 auto; width:100%;">
+  <div style="display:grid; grid-template-columns: 420px 1fr; gap:18px;">
+    <div class="sp-card" id="sp-cfd-live-card"></div>
+    <div class="sp-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">🏷️ Printable Multi-UOM Barcode Shelf Price Tags</h3>
+        <button class="sp-btn sp-btn-primary sp-btn-sm" onclick="window.print()">🖨️ Print Label Sheet</button>
+      </div>
+      <div id="sp-shelf-labels-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px;"></div>
+    </div>
+  </div>
+</main>
+
+<!-- MODAL: CHECKOUT / RECEIPT / BLIND SHIFT CLOSE / PIN SWITCH -->
+<div class="sp-modal-backdrop" id="sp-modal-backdrop">
+  <div class="sp-modal" id="sp-modal-content"></div>
+</div>
+
+  <script>
+window.STOREPOINT_DEFAULT_STATE = {
+  config: {
+    storeName: "StorePoint Sari-Sari & Mini-Mart",
+    branchName: "Main Counter • Terminal 01",
+    tin: "123-456-789-000 VAT",
+    currencyCode: "PHP",
+    currencySymbol: "₱",
+    taxRatePercent: 12,
+    taxMode: "INCLUSIVE",
+    activeCountryPack: "pack-ph-retail",
+    paperWidthMm: 58,
+    kioskLocked: false
+  },
+  activeUser: { username: "admin", displayName: "Jeff S. (Owner)", role: "ADMIN", pin: "8492" },
+  users: [
+    { username: "admin", displayName: "Jeff S. (Owner)", role: "ADMIN", pin: "8492", badge: "ADM-001" },
+    { username: "maria", displayName: "Maria Santos (Cashier)", role: "CASHIER", pin: "5931", badge: "CSH-002" },
+    { username: "carlo", displayName: "Carlo Reyes (Inventory)", role: "INVENTORY", pin: "7392", badge: "INV-003" }
+  ],
+  shift: {
+    id: "SHF-2026-01",
+    cashier: "Jeff S. (Owner)",
+    status: "OPEN",
+    openingFloat: 2000.00,
+    cashSales: 1485.00,
+    pettyCashIn: 0.00,
+    pettyCashOut: 150.00,
+    cashRefunds: 0.00,
+    openedAt: "08:00 AM",
+    drawerLogs: [
+      { time: "08:00 AM", type: "OPEN_FLOAT", amount: 2000.00, reason: "Morning opening drawer float" },
+      { time: "10:15 AM", type: "CASH_OUT", amount: -150.00, reason: "Ice delivery petty cash payout" }
+    ]
+  },
+  categories: [
+    { id: "cat_rice", name: "Rice & Bulk Grains", color: "#16A34A", icon: "🌾" },
+    { id: "cat_coffee", name: "Beverages & Coffee", color: "#2D55D6", icon: "☕" },
+    { id: "cat_noodles", name: "Instant Noodles", color: "#D97706", icon: "🍜" },
+    { id: "cat_canned", name: "Canned Goods", color: "#DC2626", icon: "🥫" },
+    { id: "cat_personal", name: "Sachets & Personal Care", color: "#7C3AED", icon: "🧴" },
+    { id: "cat_tobacco", name: "Multi-UOM & Sundries", color: "#475569", icon: "📦" }
+  ],
+  products: [
+    {
+      id: "prd_rice_1kg",
+      sku: "RICE-JAS-1KG",
+      name: "Sinandomeng / Jasmine Rice (Retail)",
+      categoryId: "cat_rice",
+      baseUom: "kg",
+      stockBase: 45,
+      reorderPoint: 20,
+      costBase: 43.00,
+      expiryDate: "2027-08-15",
+      uoms: [
+        { code: "1kg", name: "1 kg Retail Bag", factor: 1, price: 54.00, barcode: "480001001" },
+        { code: "5kg", name: "5 kg Family Pack", factor: 5, price: 260.00, barcode: "480001005" },
+        { code: "25kg", name: "25 kg Half-Sack", factor: 25, price: 1250.00, barcode: "480001025" }
+      ]
+    },
+    {
+      id: "prd_rice_bulk50",
+      sku: "RAW-RICE-50KG",
+      name: "Bulk Jasmine Rice 50kg Master Sack (Raw BOM)",
+      categoryId: "cat_rice",
+      baseUom: "kg",
+      stockBase: 150,
+      reorderPoint: 50,
+      costBase: 42.00,
+      expiryDate: "2027-09-01",
+      uoms: [
+        { code: "kg", name: "1 kg Bulk", factor: 1, price: 50.00, barcode: "480009001" },
+        { code: "sack50", name: "50 kg Master Sack", factor: 50, price: 2350.00, barcode: "480009050" }
+      ]
+    },
+    {
+      id: "prd_nescafe",
+      sku: "COF-NES-3IN1",
+      name: "Nescafé Original 3-in-1 Twin Pack",
+      categoryId: "cat_coffee",
+      baseUom: "sachet",
+      stockBase: 180,
+      reorderPoint: 48,
+      costBase: 11.50,
+      expiryDate: "2027-05-20",
+      uoms: [
+        { code: "sachet", name: "1 Sachet (Tingi)", factor: 1, price: 15.00, barcode: "480002001" },
+        { code: "tie10", name: "10-Sachet Tie", factor: 10, price: 142.00, barcode: "480002010" },
+        { code: "case120", name: "Master Case (120s)", factor: 120, price: 1620.00, barcode: "480002120" }
+      ]
+    },
+    {
+      id: "prd_canton",
+      sku: "NDL-LM-CANTON",
+      name: "Lucky Me! Pancit Canton Kalamansi",
+      categoryId: "cat_noodles",
+      baseUom: "pack",
+      stockBase: 84,
+      reorderPoint: 24,
+      costBase: 12.25,
+      expiryDate: "2027-02-10",
+      uoms: [
+        { code: "pack", name: "1 Pack (Tingi)", factor: 1, price: 16.00, barcode: "480003001" },
+        { code: "pack6", name: "6-Pack Bundle", factor: 6, price: 92.00, barcode: "480003006" },
+        { code: "case72", name: "Case (72 Packs)", factor: 72, price: 1050.00, barcode: "480003072" }
+      ]
+    },
+    {
+      id: "prd_tuna",
+      sku: "CAN-CEN-TUNA",
+      name: "Century Tuna Flakes in Oil 155g",
+      categoryId: "cat_canned",
+      baseUom: "can",
+      stockBase: 14,
+      reorderPoint: 18,
+      costBase: 31.00,
+      expiryDate: "2026-12-05",
+      uoms: [
+        { code: "can", name: "1 Can", factor: 1, price: 39.00, barcode: "480004001" },
+        { code: "case48", name: "Case (48 Cans)", factor: 48, price: 1780.00, barcode: "480004048" }
+      ]
+    },
+    {
+      id: "prd_coke",
+      sku: "BEV-COKE-15L",
+      name: "Coca-Cola Original 1.5L Bottle",
+      categoryId: "cat_coffee",
+      baseUom: "bottle",
+      stockBase: 36,
+      reorderPoint: 12,
+      costBase: 58.00,
+      expiryDate: "2027-04-01",
+      uoms: [
+        { code: "bottle", name: "1 Bottle (1.5L)", factor: 1, price: 72.00, barcode: "480005001" },
+        { code: "case12", name: "12-Bottle Crate", factor: 12, price: 820.00, barcode: "480005012" }
+      ]
+    },
+    {
+      id: "prd_shampoo",
+      sku: "PER-SUN-SACHET",
+      name: "Sunsilk Strong & Long Shampoo Sachet",
+      categoryId: "cat_personal",
+      baseUom: "sachet",
+      stockBase: 144,
+      reorderPoint: 36,
+      costBase: 5.50,
+      expiryDate: "2028-01-01",
+      uoms: [
+        { code: "sachet", name: "1 Sachet (Tingi)", factor: 1, price: 8.00, barcode: "480006001" },
+        { code: "dozen12", name: "1 Dozen Strip (12s)", factor: 12, price: 88.00, barcode: "480006012" }
+      ]
+    },
+    {
+      id: "prd_marlboro",
+      sku: "TOB-MENTHOL",
+      name: "Menthol Filter Sticks (Multi-UOM Tiered)",
+      categoryId: "cat_tobacco",
+      baseUom: "stick",
+      stockBase: 400,
+      reorderPoint: 100,
+      costBase: 7.20,
+      expiryDate: "2028-06-01",
+      uoms: [
+        { code: "stick", name: "1 Stick (Tingi)", factor: 1, price: 10.00, barcode: "480007001" },
+        { code: "pack10", name: "Half-Pack (10s)", factor: 10, price: 95.00, barcode: "480007010" },
+        { code: "pack20", name: "Full Pack (20s)", factor: 20, price: 185.00, barcode: "480007020" },
+        { code: "ream200", name: "1 Ream (200s)", factor: 200, price: 1790.00, barcode: "480007200" }
+      ]
+    }
+  ],
+  floatWallets: [
+    { id: "flt_gcash", code: "GCASH", name: "GCash Cash-In / Cash-Out", category: "EWALLET", color: "#007DFE", balance: 18500.00, fee: 10.00, commissionBps: 0 },
+    { id: "flt_maya", code: "MAYA", name: "Maya Wallet & Bank Transfer", category: "EWALLET", color: "#00B4D8", balance: 9200.00, fee: 10.00, commissionBps: 0 },
+    { id: "flt_smart", code: "SMART", name: "Smart / TNT Prepaid E-Load", category: "AIRTIME_LOAD", color: "#16A34A", balance: 4350.00, fee: 2.00, commissionBps: 200 },
+    { id: "flt_globe", code: "GLOBE", name: "Globe / TM Prepaid E-Load", category: "AIRTIME_LOAD", color: "#7C3AED", balance: 3820.00, fee: 2.00, commissionBps: 200 }
+  ],
+  floatLedger: [
+    { id: "FL-102", time: "09:12 AM", wallet: "GCASH", type: "CUSTOMER_CASH_IN", principal: 1000.00, delta: -1000.00, fee: 20.00, rebate: 0.00, balanceAfter: 18500.00, ref: "GC-9981201" },
+    { id: "FL-101", time: "08:45 AM", wallet: "SMART", type: "TOPUP_SALE", principal: 100.00, delta: -98.00, fee: 2.00, rebate: 2.00, balanceAfter: 4350.00, ref: "0919-555-0192" }
+  ],
+  customers: [
+    { id: "cus_1", name: "Aling Nena Dela Cruz", phone: "0917-555-0143", creditLimit: 2500.00, balance: 650.00, points: 142 },
+    { id: "cus_2", name: "Mang Jose Bautista", phone: "0918-555-0921", creditLimit: 1500.00, balance: 320.00, points: 88 },
+    { id: "cus_3", name: "Sari-Sari Reseller — Lorna", phone: "0922-555-4410", creditLimit: 10000.00, balance: 2400.00, points: 510 }
+  ],
+  suppliers: [
+    { id: "sup_1", name: "Golden Grain Rice Milling Corp.", contact: "Engr. Ramon Sy", phone: "0917-800-1122", terms: "NET_15", schedule: "Mondays & Thursdays" },
+    { id: "sup_2", name: "Metro FMCG Wholesale Distributors", contact: "Grace Lim", phone: "0918-900-3344", terms: "NET_7", schedule: "Tuesdays & Fridays" },
+    { id: "sup_3", name: "Coca-Cola Beverages Route Truck", contact: "Route #14 Driver", phone: "0920-111-2233", terms: "COD", schedule: "Wednesdays & Saturdays" }
+  ],
+  purchaseOrders: [
+    { id: "PO-00101", supplierId: "sup_1", supplierName: "Golden Grain Rice Milling Corp.", productId: "prd_rice_bulk50", productName: "Bulk Jasmine Rice 50kg Master Sack (Raw BOM)", uomName: "50 kg Master Sack", factor: 50, qty: 3, unitCost: 2100.00, freight: 150.00, status: "ORDERED", date: "2026-11-23" }
+  ],
+  overheads: [
+    { id: "ovh_1", title: "Store Space Monthly Rental", category: "RENT", amount: 8500.00, dueDate: "2026-11-30", priority: "HIGH", isPaid: false },
+    { id: "ovh_2", title: "Meralco / Electric Utility Bill", category: "UTILITIES", amount: 3420.00, dueDate: "2026-11-28", priority: "HIGH", isPaid: false },
+    { id: "ovh_3", title: "Metro FMCG Supplier Invoice #882", category: "SUPPLIER_INVOICE", amount: 6400.00, dueDate: "2026-11-26", priority: "MEDIUM", isPaid: false }
+  ],
+  transactions: [
+    {
+      id: "OR-000101",
+      time: "11:20 AM",
+      cashier: "Jeff S. (Owner)",
+      customerName: "Walk-in Customer",
+      tender: "CASH",
+      subtotal: 294.00,
+      discount: 0.00,
+      netSales: 262.50,
+      tax: 31.50,
+      total: 294.00,
+      cogs: 223.50,
+      cashPaid: 500.00,
+      change: 206.00,
+      status: "COMPLETED",
+      items: [
+        { productId: "prd_rice_1kg", name: "Sinandomeng / Jasmine Rice (Retail)", uomName: "1 kg Retail Bag", factor: 1, qty: 2, price: 54.00, cost: 43.00 },
+        { productId: "prd_canton", name: "Lucky Me! Pancit Canton Kalamansi", uomName: "6-Pack Bundle", factor: 6, qty: 1, price: 92.00, cost: 73.50 },
+        { productId: "prd_coke", name: "Coca-Cola Original 1.5L Bottle", uomName: "1 Bottle (1.5L)", factor: 1, qty: 1, price: 72.00, cost: 58.00 },
+        { productId: "prd_nescafe", name: "Nescafé Original 3-in-1 Twin Pack", uomName: "1 Sachet (Tingi)", factor: 1, qty: 1, price: 22.00, cost: 11.50 }
+      ]
+    }
+  ],
+  bomLogs: [
+    { id: "BOM-2026-01", time: "08:30 AM", rawName: "Bulk Jasmine Rice 50kg Master Sack", rawUsedKg: 50, targetName: "Sinandomeng / Jasmine Rice (Retail)", producedBags: 50, bagCost: 1.00, derivedUnitCogs: 43.00 }
+  ],
+  stockMovements: [
+    { time: "11:20 AM", product: "Sinandomeng / Jasmine Rice (Retail)", reason: "POS_SALE", delta: -2, balance: 45, wac: 43.00, ref: "OR-000101" },
+    { time: "08:30 AM", product: "Sinandomeng / Jasmine Rice (Retail)", reason: "BOM_PRODUCE", delta: 50, balance: 47, wac: 43.00, ref: "BOM-2026-01" },
+    { time: "08:30 AM", product: "Bulk Jasmine Rice 50kg Master Sack", reason: "BOM_CONSUME", delta: -50, balance: 150, wac: 42.00, ref: "BOM-2026-01" }
+  ],
+  glJournals: [
+    { id: "GL-00101", time: "11:20 AM", ref: "OR-000101", desc: "POS Cash Sale + 12% VAT + WAC COGS", debitAccount: "1000_CASH_AND_BANK (₱294.00) / 5000_COGS (₱223.50)", creditAccount: "4000_SALES_REV (₱262.50) / 2100_VAT (₱31.50) / 1200_INV (₱223.50)", amount: 294.00 }
+  ],
+  cart: [
+    { productId: "prd_rice_1kg", name: "Sinandomeng / Jasmine Rice (Retail)", uomCode: "1kg", uomName: "1 kg Retail Bag", factor: 1, qty: 2, price: 54.00, discount: 0 },
+    { productId: "prd_nescafe", name: "Nescafé Original 3-in-1 Twin Pack", uomCode: "tie10", uomName: "10-Sachet Tie", factor: 10, qty: 1, price: 142.00, discount: 0 }
+  ],
+  parkedCarts: [
+    {
+      id: "PRK-01",
+      note: "Neighboring Sari-Sari Order (Waiting for container)",
+      time: "10:50 AM",
+      items: [
+        { productId: "prd_canton", name: "Lucky Me! Pancit Canton Kalamansi", uomCode: "pack6", uomName: "6-Pack Bundle", factor: 6, qty: 2, price: 92.00, discount: 0 }
+      ]
+    }
+  ]
+};
+</script>
+  <script>
+(function() {
+  const S = JSON.parse(JSON.stringify(window.STOREPOINT_DEFAULT_STATE));
+  let selectedCategoryId = "ALL";
+
+  const COUNTRY_PRESETS = {
+    "pack-ph-retail": { storeName: "StorePoint Sari-Sari & Mini-Mart", currencyCode: "PHP", symbol: "₱", taxRate: 12, mode: "INCLUSIVE", tin: "123-456-789-000 BIR VAT", rateMul: 1 },
+    "pack-us-general": { storeName: "StorePoint Neighborhood Market & Deli", currencyCode: "USD", symbol: "$", taxRate: 8.25, mode: "EXCLUSIVE", tin: "EIN 94-3829101", rateMul: 0.04 },
+    "pack-in-kirana": { storeName: "StorePoint Kirana & Supermart", currencyCode: "INR", symbol: "₹", taxRate: 18, mode: "EXCLUSIVE", tin: "GSTIN 27AABCU9603R1ZM", rateMul: 1.5 },
+    "pack-ke-duka": { storeName: "StorePoint Duka & M-Pesa Center", currencyCode: "KES", symbol: "KSh", taxRate: 16, mode: "INCLUSIVE", tin: "KRA PIN P051293841Q", rateMul: 2.3 },
+    "pack-mx-abarrotes": { storeName: "StorePoint Tienda de Abarrotes", currencyCode: "MXN", symbol: "Mex$", taxRate: 16, mode: "INCLUSIVE", tin: "RFC STA261123AB1", rateMul: 0.35 }
+  };
+
+  function fmt(n) {
+    const val = Number(n || 0);
+    return S.config.currencySymbol + val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function calcCartTotals() {
+    const subtotal = S.cart.reduce((sum, i) => sum + (i.price * i.qty - (i.discount || 0)), 0);
+    const cartDisc = Math.max(0, Number(document.getElementById("sp-cart-discount")?.value || 0));
+    const afterDisc = Math.max(0, subtotal - cartDisc);
+    const rate = S.config.taxRatePercent / 100;
+    let net = afterDisc, tax = 0, total = afterDisc;
+    if (S.config.taxMode === "INCLUSIVE") {
+      net = afterDisc / (1 + rate);
+      tax = afterDisc - net;
+      total = afterDisc;
+    } else {
+      net = afterDisc;
+      tax = afterDisc * rate;
+      total = net + tax;
+    }
+    return { subtotal, cartDisc, net, tax, total };
+  }
+
+  function expectedDrawerCash() {
+    return S.shift.openingFloat + S.shift.cashSales + S.shift.pettyCashIn - S.shift.pettyCashOut - S.shift.cashRefunds;
+  }
+
+  const SP = {
+    switchTab(tabId) {
+      ["pos", "float", "inventory", "purchasing", "admin", "cfd"].forEach(id => {
+        const view = document.getElementById("view-" + id);
+        const btn = document.getElementById("tab-btn-" + id);
+        if (view) view.style.display = (id === tabId) ? (id === "pos" ? "grid" : "block") : "none";
+        if (btn) btn.classList.toggle("active", id === tabId);
+      });
+      this.renderAll();
+    },
+
+    toggleTheme() {
+      const html = document.documentElement;
+      html.setAttribute("data-theme", html.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    },
+
+    switchCountryPack(packId) {
+      const preset = COUNTRY_PRESETS[packId];
+      if (!preset) return;
+      const prevPreset = COUNTRY_PRESETS[S.config.activeCountryPack] || COUNTRY_PRESETS["pack-ph-retail"];
+      const ratio = preset.rateMul / prevPreset.rateMul;
+      S.config.activeCountryPack = packId;
+      S.config.storeName = preset.storeName;
+      S.config.currencyCode = preset.currencyCode;
+      S.config.currencySymbol = preset.symbol;
+      S.config.taxRatePercent = preset.taxRate;
+      S.config.taxMode = preset.mode;
+      S.config.tin = preset.tin;
+      S.products.forEach(p => {
+        p.costBase = +(p.costBase * ratio).toFixed(2);
+        p.uoms.forEach(u => { u.price = +(u.price * ratio).toFixed(2); });
+      });
+      S.cart.forEach(c => { c.price = +(c.price * ratio).toFixed(2); });
+      this.renderAll();
+    },
+
+    selectCategory(catId) {
+      selectedCategoryId = catId;
+      this.renderPosCatalog();
+    },
+
+    addToCart(productId, uomCode) {
+      const prod = S.products.find(p => p.id === productId);
+      if (!prod) return;
+      const uom = prod.uoms.find(u => u.code === uomCode) || prod.uoms[0];
+      const existing = S.cart.find(c => c.productId === productId && c.uomCode === uom.code);
+      const currentBaseInCart = S.cart.filter(c => c.productId === productId).reduce((s, c) => s + c.qty * c.factor, 0);
+      if (currentBaseInCart + uom.factor > prod.stockBase) {
+        alert("Insufficient stock on hand (" + prod.stockBase + " " + prod.baseUom + " available)");
+        return;
+      }
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        S.cart.push({ productId: prod.id, name: prod.name, uomCode: uom.code, uomName: uom.name, factor: uom.factor, qty: 1, price: uom.price, discount: 0 });
+      }
+      this.renderAll();
+    },
+
+    updateCartQty(idx, delta) {
+      const item = S.cart[idx];
+      if (!item) return;
+      const next = item.qty + delta;
+      if (next <= 0) S.cart.splice(idx, 1);
+      else item.qty = next;
+      this.renderAll();
+    },
+
+    clearCart() {
+      S.cart = [];
+      this.renderAll();
+    },
+
+    parkCurrentCart() {
+      if (S.cart.length === 0) return;
+      const note = prompt("Enter customer name or note for held cart:", "Walk-in Customer") || "Held Order";
+      S.parkedCarts.push({ id: "PRK-" + (S.parkedCarts.length + 1), note, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), items: S.cart });
+      S.cart = [];
+      this.renderAll();
+    },
+
+    resumeParkedCart(idx) {
+      const parked = S.parkedCarts[idx];
+      if (!parked) return;
+      S.cart = parked.items;
+      S.parkedCarts.splice(idx, 1);
+      this.renderAll();
+    },
+
+    scanBarcodeInput(raw) {
+      const code = (raw || "").trim();
+      if (!code) return;
+      for (const p of S.products) {
+        const matchedUom = p.uoms.find(u => u.barcode === code || p.sku.toLowerCase() === code.toLowerCase());
+        if (matchedUom) {
+          this.addToCart(p.id, matchedUom.code);
+          document.getElementById("sp-pos-search").value = "";
+          this.renderPosCatalog();
+          return;
+        }
+      }
+      alert("No product or UOM barcode matched: " + code);
+    },
+
+    openModal(html) {
+      document.getElementById("sp-modal-content").innerHTML = html;
+      document.getElementById("sp-modal-backdrop").classList.add("open");
+    },
+
+    closeModal() {
+      document.getElementById("sp-modal-backdrop").classList.remove("open");
+    },
+
+    openCheckoutModal(tender) {
+      if (S.cart.length === 0) { alert("Basket is empty. Click any product UOM to add items."); return; }
+      const t = calcCartTotals();
+      const custOptions = S.customers.map(c => "<option value='" + c.id + "'>" + c.name + " (Avail Credit: " + fmt(c.creditLimit - c.balance) + ")</option>").join("");
+      this.openModal(
+        "<h3 style='margin-top:0;'>💳 Complete Sale — " + tender + "</h3>" +
+        "<div class='sp-card-tonal' style='margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;'>" +
+        "<span>Total Amount Due</span><strong style='font-size:22px; color:var(--sp-primary);'>" + fmt(t.total) + "</strong></div>" +
+        (tender === "STORE_CREDIT"
+          ? "<label style='font-size:12px; font-weight:700;'>Charge to Customer Account (Utang / AR Ledger)</label><select id='sp-chk-customer' class='sp-select' style='margin:8px 0 14px;'>" + custOptions + "</select>"
+          : "<label style='font-size:12px; font-weight:700;'>Amount Tendered</label><input type='number' id='sp-chk-paid' class='sp-input' style='margin:8px 0 14px; font-size:18px; font-weight:800;' value='" + Math.ceil(t.total) + "' />") +
+        "<div style='display:flex; justify-content:flex-end; gap:8px;'>" +
+        "<button class='sp-btn sp-btn-outline' onclick='SP.closeModal()'>Cancel</button>" +
+        "<button class='sp-btn sp-btn-primary' onclick="SP.confirmSale('" + tender + "')">✅ Confirm & Print 58mm Receipt</button></div>"
+      );
+    },
+
+    confirmSale(tender) {
+      const t = calcCartTotals();
+      let paid = t.total;
+      let customerName = "Walk-in Customer";
+      if (tender === "STORE_CREDIT") {
+        const custId = document.getElementById("sp-chk-customer").value;
+        const cust = S.customers.find(c => c.id === custId);
+        if (!cust || cust.balance + t.total > cust.creditLimit) {
+          alert("Credit limit exceeded for " + (cust ? cust.name : "customer") + "!");
+          return;
+        }
+        cust.balance += t.total;
+        cust.points += Math.floor(t.total / 10);
+        customerName = cust.name;
+      } else {
+        paid = Number(document.getElementById("sp-chk-paid")?.value || t.total);
+        if (paid < t.total) { alert("Amount tendered is less than Total Due!"); return; }
+      }
+      const change = Math.max(0, paid - t.total);
+      let cogs = 0;
+      const saleItems = S.cart.map(c => {
+        const prod = S.products.find(p => p.id === c.productId);
+        const baseDeducted = c.qty * c.factor;
+        const lineCost = (prod ? prod.costBase : 0) * baseDeducted;
+        cogs += lineCost;
+        if (prod) {
+          prod.stockBase = Math.max(0, prod.stockBase - baseDeducted);
+          S.stockMovements.unshift({ time: "Just now", product: prod.name, reason: "POS_SALE", delta: -baseDeducted, balance: prod.stockBase, wac: prod.costBase, ref: "OR-000" + (101 + S.transactions.length) });
+        }
+        return { productId: c.productId, name: c.name, uomName: c.uomName, factor: c.factor, qty: c.qty, price: c.price, cost: lineCost };
+      });
+      if (tender === "CASH") S.shift.cashSales += t.total;
+      const orNum = "OR-000" + (101 + S.transactions.length);
+      const tx = { id: orNum, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), cashier: S.activeUser.displayName, customerName, tender, subtotal: t.subtotal, discount: t.cartDisc, netSales: t.net, tax: t.tax, total: t.total, cogs, cashPaid: paid, change, status: "COMPLETED", items: saleItems };
+      S.transactions.unshift(tx);
+      S.glJournals.unshift({
+        id: "GL-" + orNum, time: tx.time, ref: orNum, desc: "POS " + tender + " Sale + Tax + WAC COGS",
+        debitAccount: (tender === "STORE_CREDIT" ? "1100_AR" : "1000_CASH") + " (" + fmt(t.total) + ") / 5000_COGS (" + fmt(cogs) + ")",
+        creditAccount: "4000_SALES (" + fmt(t.net) + ") / 2100_TAX (" + fmt(t.tax) + ") / 1200_INV (" + fmt(cogs) + ")",
+        amount: t.total
+      });
+      S.cart = [];
+      if (document.getElementById("sp-cart-discount")) document.getElementById("sp-cart-discount").value = "0";
+      this.renderAll();
+      this.showReceiptModal(tx.id);
+    },
+
+    showReceiptModal(txId) {
+      const tx = S.transactions.find(t => t.id === txId) || S.transactions[0];
+      if (!tx) return;
+      const lines = [
+        S.config.storeName.toUpperCase(),
+        S.config.branchName,
+        "TIN: " + S.config.tin,
+        "--------------------------------",
+        "RCPT: " + tx.id + "    " + tx.time,
+        "CASHIER: " + tx.cashier,
+        "CUSTOMER: " + tx.customerName,
+        "--------------------------------"
+      ];
+      tx.items.forEach(i => {
+        lines.push(i.name + " (" + i.uomName + ")");
+        lines.push("  " + i.qty + " x " + fmt(i.price) + " = " + fmt(i.qty * i.price));
+      });
+      lines.push(
+        "--------------------------------",
+        "NET SALES:      " + fmt(tx.netSales),
+        "TAX (" + S.config.taxRatePercent + "%):       " + fmt(tx.tax),
+        "TOTAL:          " + fmt(tx.total),
+        "TENDER (" + tx.tender + "):  " + fmt(tx.cashPaid),
+        "CHANGE:         " + fmt(tx.change),
+        "--------------------------------",
+        "ESC/POS 58mm • RJ11 Drawer Pulse: 1B700019FA",
+        "Thank you for shopping at StorePoint!"
+      );
+      this.openModal(
+        "<h3 style='margin-top:0;'>🖨️ Thermal Receipt — " + tx.id + "</h3>" +
+        "<div class='sp-receipt-paper'>" + lines.join("\n") + "</div>" +
+        "<div style='display:flex; justify-content:space-between; margin-top:14px; flex-wrap:wrap; gap:8px;'>" +
+        "<button class='sp-btn sp-btn-danger sp-btn-sm' onclick="SP.refundTransaction('" + tx.id + "')">🔁 Return / Refund Receipt</button>" +
+        "<div style='display:flex; gap:8px;'>" +
+        "<button class='sp-btn sp-btn-tonal sp-btn-sm' onclick='window.print()'>🖨️ Print 58mm</button>" +
+        "<button class='sp-btn sp-btn-primary sp-btn-sm' onclick='SP.closeModal()'>Done</button></div></div>"
+      );
+    },
+
+    openReturnModal() {
+      if (S.transactions.length === 0) return;
+      this.showReceiptModal(S.transactions[0].id);
+    },
+
+    refundTransaction(txId) {
+      const tx = S.transactions.find(t => t.id === txId);
+      if (!tx || tx.status === "REFUNDED") { alert("Receipt already refunded."); return; }
+      const restock = confirm("Restock returned items back into active warehouse inventory? (Cancel = Write off as Damaged/Shrinkage)");
+      tx.status = "REFUNDED";
+      if (tx.tender === "CASH") S.shift.cashRefunds += tx.total;
+      if (restock) {
+        tx.items.forEach(i => {
+          const prod = S.products.find(p => p.id === i.productId);
+          if (prod) {
+            const restored = i.qty * i.factor;
+            prod.stockBase += restored;
+            S.stockMovements.unshift({ time: "Just now", product: prod.name, reason: "POS_RETURN_RESTOCK", delta: restored, balance: prod.stockBase, wac: prod.costBase, ref: tx.id });
+          }
+        });
+      }
+      this.closeModal();
+      this.renderAll();
+    },
+
+    openPettyCashModal() {
+      const amt = Number(prompt("Enter Petty Cash Out amount (or negative for Cash-In):", "100") || 0);
+      if (!amt) return;
+      const reason = prompt("Reason for cash drawer movement:", "Store supplies / Ice delivery") || "Petty Cash";
+      if (amt > 0) S.shift.pettyCashOut += amt;
+      else S.shift.pettyCashIn += Math.abs(amt);
+      S.shift.drawerLogs.unshift({ time: "Just now", type: amt > 0 ? "CASH_OUT" : "CASH_IN", amount: -amt, reason });
+      this.renderAll();
+    },
+
+    openBlindCloseModal() {
+      const exp = expectedDrawerCash();
+      this.openModal(
+        "<h3 style='margin-top:0;'>🔒 Shift Handover & Blind Cash Count Reconciliation</h3>" +
+        "<p style='font-size:13px; color:var(--sp-text-muted);'>Enter physical cash counted in drawer to compute variance and print Z-Reading slip.</p>" +
+        "<label style='font-size:12px; font-weight:700;'>Physical Counted Cash in Drawer</label>" +
+        "<input type='number' id='sp-blind-counted' class='sp-input' style='margin:8px 0 14px; font-size:18px; font-weight:800;' value='" + exp + "' />" +
+        "<div style='display:flex; justify-content:flex-end; gap:8px;'>" +
+        "<button class='sp-btn sp-btn-outline' onclick='SP.closeModal()'>Cancel</button>" +
+        "<button class='sp-btn sp-btn-primary' onclick='SP.confirmBlindClose()'>Print Shift Z-Reading Slip</button></div>"
+      );
+    },
+
+    confirmBlindClose() {
+      const counted = Number(document.getElementById("sp-blind-counted")?.value || 0);
+      const exp = expectedDrawerCash();
+      const variance = counted - exp;
+      this.openModal(
+        "<h3 style='margin-top:0;'>🧾 Shift Z-Reconciliation Slip</h3>" +
+        "<div class='sp-receipt-paper'>" +
+        "SHIFT Z-RECONCILIATION REPORT\n" +
+        "================================\n" +
+        "SHIFT ID:       " + S.shift.id + "\n" +
+        "CASHIER:        " + S.activeUser.displayName + "\n" +
+        "OPENING FLOAT:  " + fmt(S.shift.openingFloat) + "\n" +
+        "CASH SALES:     " + fmt(S.shift.cashSales) + "\n" +
+        "PETTY CASH OUT: -" + fmt(S.shift.pettyCashOut) + "\n" +
+        "CASH REFUNDS:   -" + fmt(S.shift.cashRefunds) + "\n" +
+        "--------------------------------\n" +
+        "EXPECTED CASH:  " + fmt(exp) + "\n" +
+        "COUNTED CASH:   " + fmt(counted) + "\n" +
+        "VARIANCE:       " + fmt(variance) + " (" + (variance === 0 ? "EXACT MATCH" : (variance > 0 ? "OVER" : "SHORT")) + ")\n" +
+        "================================" +
+        "</div><div style='margin-top:14px; display:flex; justify-content:flex-end;'><button class='sp-btn sp-btn-primary' onclick='SP.closeModal()'>Close</button></div>"
+      );
+    },
+
+    openPinModal() {
+      const userBtns = S.users.map(u =>
+        "<button class='sp-btn sp-btn-tonal' style='width:100%; justify-content:space-between; margin-bottom:8px;' onclick="SP.switchUser('" + u.username + "')">" +
+        "<span>👤 " + u.displayName + "</span><span class='sp-badge sp-badge-info'>" + u.role + " • PIN " + u.pin + "</span></button>"
+      ).join("");
+      this.openModal(
+        "<h3 style='margin-top:0;'>🔐 Fast Cashier & Role PIN Switcher</h3>" +
+        "<p style='font-size:13px; color:var(--sp-text-muted);'>PBKDF2-HMAC-SHA256 (120,000 iterations) • Progressive per-account lockout enabled.</p>" +
+        userBtns +
+        "<div style='display:flex; justify-content:flex-end; margin-top:10px;'><button class='sp-btn sp-btn-outline' onclick='SP.closeModal()'>Close</button></div>"
+      );
+    },
+
+    switchUser(username) {
+      const u = S.users.find(x => x.username === username);
+      if (u) S.activeUser = u;
+      this.closeModal();
+      this.renderAll();
+    },
+
+    submitFloatTransaction() {
+      const walletCode = document.getElementById("sp-flt-wallet").value;
+      const type = document.getElementById("sp-flt-type").value;
+      const principal = Number(document.getElementById("sp-flt-amount").value || 0);
+      const fee = Number(document.getElementById("sp-flt-fee").value || 0);
+      const ref = document.getElementById("sp-flt-ref").value || "REF-" + Math.floor(Math.random() * 90000 + 10000);
+      const w = S.floatWallets.find(x => x.code === walletCode);
+      if (!w || principal <= 0) return;
+
+      const rebate = type === "TOPUP_SALE" ? +(principal * (w.commissionBps / 10000)).toFixed(2) : 0;
+      const delta = (type === "OWNER_RELOAD" || type === "CUSTOMER_CASH_OUT") ? principal : -(principal - rebate);
+      if (w.balance + delta < 0) { alert("Insufficient " + w.name + " float balance!"); return; }
+      w.balance = +(w.balance + delta).toFixed(2);
+      S.floatLedger.unshift({ id: "FL-" + (101 + S.floatLedger.length), time: "Just now", wallet: w.code, type, principal, delta, fee: type === "OWNER_RELOAD" ? 0 : fee, rebate, balanceAfter: w.balance, ref });
+      if (fee > 0 || rebate > 0) {
+        S.glJournals.unshift({ id: "GL-FLT-" + S.floatLedger.length, time: "Just now", ref, desc: w.code + " Service Fee & Rebate Income", debitAccount: "1000_CASH / 1300_FLOAT (" + fmt(fee + rebate) + ")", creditAccount: "4100_DIGITAL_SERVICE_INCOME (" + fmt(fee + rebate) + ")", amount: fee + rebate });
+      }
+      this.renderAll();
+    },
+
+    executeBomConversion() {
+      const rawId = document.getElementById("sp-bom-raw").value;
+      const targetId = document.getElementById("sp-bom-target").value;
+      const rawQty = Number(document.getElementById("sp-bom-raw-qty").value || 0);
+      const outQty = Number(document.getElementById("sp-bom-out-qty").value || 0);
+      const rawProd = S.products.find(p => p.id === rawId);
+      const targetProd = S.products.find(p => p.id === targetId);
+      if (!rawProd || !targetProd || rawQty <= 0 || outQty <= 0 || rawId === targetId) return;
+      if (rawProd.stockBase < rawQty) { alert("Insufficient raw material stock (" + rawProd.stockBase + " available)!"); return; }
+
+      const totalRawCost = rawQty * rawProd.costBase + outQty * 1.0;
+      const derivedUnitCost = +(totalRawCost / outQty).toFixed(2);
+      rawProd.stockBase -= rawQty;
+      const oldTotalVal = targetProd.stockBase * targetProd.costBase;
+      targetProd.stockBase += outQty;
+      targetProd.costBase = +((oldTotalVal + totalRawCost) / targetProd.stockBase).toFixed(2);
+
+      const bomId = "BOM-2026-0" + (S.bomLogs.length + 1);
+      S.bomLogs.unshift({ id: bomId, time: "Just now", rawName: rawProd.name, rawUsedKg: rawQty, targetName: targetProd.name, producedBags: outQty, bagCost: 1.0, derivedUnitCogs: derivedUnitCost });
+      S.stockMovements.unshift({ time: "Just now", product: targetProd.name, reason: "BOM_PRODUCE", delta: outQty, balance: targetProd.stockBase, wac: targetProd.costBase, ref: bomId });
+      S.stockMovements.unshift({ time: "Just now", product: rawProd.name, reason: "BOM_CONSUME", delta: -rawQty, balance: rawProd.stockBase, wac: rawProd.costBase, ref: bomId });
+      this.renderAll();
+      alert("BOM Repackaging Complete! Produced " + outQty + " units of " + targetProd.name + " at exact derived COGS of " + fmt(derivedUnitCost) + "/unit.");
+    },
+
+    runPriceChecker(code) {
+      const box = document.getElementById("sp-price-check-result");
+      const q = (code || "").trim().toLowerCase();
+      if (!q) { box.innerHTML = "Type or scan any barcode above to view all Multi-UOM tier prices & stock on hand."; return; }
+      const prod = S.products.find(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.uoms.some(u => u.barcode.includes(q)));
+      if (!prod) { box.innerHTML = "<span style='color:var(--sp-danger); font-weight:700;'>No product matched: " + code + "</span>"; return; }
+      box.innerHTML = "<div style='width:100%; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;'>" +
+        "<div><strong style='font-size:15px;'>" + prod.name + "</strong><div style='font-size:12px;'>On Hand: " + prod.stockBase + " " + prod.baseUom + " • WAC: " + fmt(prod.costBase) + "</div></div>" +
+        "<div style='display:flex; gap:6px; flex-wrap:wrap;'>" + prod.uoms.map(u => "<span class='sp-badge sp-badge-info'>" + u.name + ": " + fmt(u.price) + "</span>").join("") + "</div></div>";
+    },
+
+    adjustStocktake(productId) {
+      const prod = S.products.find(p => p.id === productId);
+      if (!prod) return;
+      const counted = Number(prompt("Physical Stocktake Count for " + prod.name + " (System shows " + prod.stockBase + " " + prod.baseUom + "):", prod.stockBase));
+      if (Number.isNaN(counted) || counted < 0) return;
+      const delta = counted - prod.stockBase;
+      if (delta === 0) return;
+      prod.stockBase = counted;
+      S.stockMovements.unshift({ time: "Just now", product: prod.name, reason: "STOCKTAKE_RECONCILIATION", delta, balance: counted, wac: prod.costBase, ref: "AUDIT" });
+      this.renderAll();
+    },
+
+    openNewProductModal() {
+      const name = prompt("New Product Name:", "Bear Brand Fortified Powdered Milk 33g");
+      if (!name) return;
+      const basePrice = Number(prompt("Single Sachet / Base Unit Selling Price:", "14") || 14);
+      const packPrice = Number(prompt("Dozen Tie (12s) Selling Price:", "158") || 158);
+      const stock = Number(prompt("Initial Stock (in base pieces):", "120") || 120);
+      S.products.unshift({
+        id: "prd_" + Date.now(), sku: "SKU-" + Math.floor(Math.random() * 9000 + 1000), name, categoryId: "cat_coffee", baseUom: "sachet", stockBase: stock, reorderPoint: 24, costBase: +(basePrice * 0.75).toFixed(2), expiryDate: "2027-12-31",
+        uoms: [
+          { code: "sachet", name: "1 Sachet (Tingi)", factor: 1, price: basePrice, barcode: "48099" + Math.floor(Math.random() * 900 + 100) },
+          { code: "tie12", name: "Dozen Tie (12s)", factor: 12, price: packPrice, barcode: "48099" + Math.floor(Math.random() * 900 + 100) }
+        ]
+      });
+      this.renderAll();
+    },
+
+    generateSmartReorderPo() {
+      const low = S.products.filter(p => p.stockBase <= p.reorderPoint);
+      const target = low[0] || S.products[0];
+      const poId = "PO-00" + (101 + S.purchaseOrders.length);
+      S.purchaseOrders.unshift({
+        id: poId, supplierId: "sup_2", supplierName: "Metro FMCG Wholesale Distributors",
+        productId: target.id, productName: target.name, uomName: target.uoms[target.uoms.length - 1].name,
+        factor: target.uoms[target.uoms.length - 1].factor, qty: 2, unitCost: +(target.costBase * target.uoms[target.uoms.length - 1].factor).toFixed(2),
+        freight: 80.0, status: "ORDERED", date: "2026-11-23"
+      });
+      this.renderAll();
+    },
+
+    receivePo(poId) {
+      const po = S.purchaseOrders.find(x => x.id === poId);
+      if (!po || po.status === "RECEIVED") return;
+      po.status = "RECEIVED";
+      const prod = S.products.find(p => p.id === po.productId);
+      if (prod) {
+        const receivedBase = po.qty * po.factor;
+        const totalLanded = po.qty * po.unitCost + po.freight;
+        const oldVal = prod.stockBase * prod.costBase;
+        prod.stockBase += receivedBase;
+        prod.costBase = +((oldVal + totalLanded) / prod.stockBase).toFixed(2);
+        S.stockMovements.unshift({ time: "Just now", product: prod.name, reason: "PO_RECEIPT", delta: receivedBase, balance: prod.stockBase, wac: prod.costBase, ref: po.id });
+      }
+      S.overheads.unshift({ id: "ovh_" + Date.now(), title: po.id + " — " + po.supplierName, category: "SUPPLIER_INVOICE", amount: po.qty * po.unitCost + po.freight, dueDate: "2026-12-08", priority: "HIGH", isPaid: false });
+      this.renderAll();
+    },
+
+    payOverhead(id) {
+      const o = S.overheads.find(x => x.id === id);
+      if (!o || o.isPaid) return;
+      o.isPaid = true;
+      S.glJournals.unshift({ id: "GL-EXP-" + S.glJournals.length, time: "Just now", ref: o.id, desc: "Paid Overhead: " + o.title, debitAccount: "6000_OPERATING_EXPENSES (" + fmt(o.amount) + ")", creditAccount: "1000_CASH_AND_BANK (" + fmt(o.amount) + ")", amount: o.amount });
+      this.renderAll();
+    },
+
+    collectCustomerAr(custId) {
+      const c = S.customers.find(x => x.id === custId);
+      if (!c || c.balance <= 0) return;
+      const pay = Number(prompt("Collect Credit Repayment from " + c.name + " (Balance: " + fmt(c.balance) + "):", c.balance) || 0);
+      if (pay <= 0) return;
+      c.balance = Math.max(0, +(c.balance - pay).toFixed(2));
+      S.shift.cashSales += pay;
+      this.renderAll();
+    },
+
+    renderPosCatalog() {
+      document.getElementById("sp-store-title").textContent = S.config.storeName;
+      document.getElementById("sp-store-subtitle").textContent = S.config.branchName + " • TIN: " + S.config.tin;
+      document.getElementById("sp-active-user-btn").textContent = "👤 " + S.activeUser.displayName + " (" + S.activeUser.role + ")";
+      document.getElementById("sp-drawer-expected").textContent = "Drawer Cash: " + fmt(expectedDrawerCash());
+
+      const catHtml = [{ id: "ALL", name: "All Items", icon: "✨" }, ...S.categories].map(c =>
+        "<button class='sp-btn " + (selectedCategoryId === c.id ? "sp-btn-primary" : "sp-btn-tonal") + " sp-btn-sm' onclick="SP.selectCategory('" + c.id + "')">" + c.icon + " " + c.name + "</button>"
+      ).join("");
+      document.getElementById("sp-pos-categories").innerHTML = catHtml;
+
+      const q = (document.getElementById("sp-pos-search")?.value || "").trim().toLowerCase();
+      const filtered = S.products.filter(p =>
+        (selectedCategoryId === "ALL" || p.categoryId === selectedCategoryId) &&
+        (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.uoms.some(u => u.barcode.includes(q)))
+      );
+
+      document.getElementById("sp-pos-product-grid").innerHTML = filtered.map(p => {
+        const isLow = p.stockBase <= p.reorderPoint;
+        const uomBtns = p.uoms.map(u =>
+          "<button class='sp-uom-btn' onclick="SP.addToCart('" + p.id + "', '" + u.code + "')">" +
+          u.name + "<br/><strong style='color:var(--sp-primary); font-size:12.5px;'>" + fmt(u.price) + "</strong></button>"
+        ).join("");
+        return "<div class='sp-prod-card'>" +
+          "<div><div style='display:flex; justify-content:space-between; gap:6px; align-items:start;'>" +
+          "<span style='font-size:10.5px; font-weight:700; color:var(--sp-text-muted);'>" + p.sku + "</span>" +
+          "<span class='sp-badge " + (isLow ? "sp-badge-danger" : "sp-badge-success") + "'>" + p.stockBase + " " + p.baseUom + (isLow ? " • LOW" : "") + "</span></div>" +
+          "<div style='font-weight:800; font-size:14.5px; margin:6px 0 4px;'>" + p.name + "</div>" +
+          "<div style='font-size:11px; color:var(--sp-text-muted);'>WAC Cost: " + fmt(p.costBase) + "/" + p.baseUom + " • Exp: " + p.expiryDate + "</div></div>" +
+          "<div><div style='font-size:10.5px; font-weight:700; color:var(--sp-text-muted); margin-bottom:5px;'>Tap UOM / Packaging to Add:</div>" +
+          "<div class='sp-uom-pills'>" + uomBtns + "</div></div></div>";
+      }).join("");
+    },
+
+    renderCart() {
+      const count = S.cart.reduce((s, i) => s + i.qty, 0);
+      document.getElementById("sp-cart-count").textContent = count + " items";
+      document.getElementById("sp-parked-banner").innerHTML = S.parkedCarts.map((pk, idx) =>
+        "<div class='sp-card-tonal' style='padding:8px 12px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; font-size:12px;'>" +
+        "<span>⏸️ <strong>" + pk.note + "</strong> (" + pk.items.length + " lines)</span>" +
+        "<button class='sp-btn sp-btn-primary sp-btn-sm' onclick='SP.resumeParkedCart(" + idx + ")'>Resume</button></div>"
+      ).join("");
+
+      document.getElementById("sp-cart-list").innerHTML = S.cart.length === 0
+        ? "<div style='text-align:center; padding:28px 10px; color:var(--sp-text-muted); font-size:13px;'>Cart is empty. Tap any product UOM pill on the left to add items.</div>"
+        : S.cart.map((item, idx) =>
+          "<div class='sp-card-tonal' style='padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px;'>" +
+          "<div style='flex:1;'><div style='font-weight:700; font-size:13px;'>" + item.name + "</div>" +
+          "<span class='sp-badge sp-badge-purple'>" + item.uomName + " (x" + item.factor + " base)</span> " +
+          "<span style='font-size:12px; color:var(--sp-text-muted);'>" + fmt(item.price) + "</span></div>" +
+          "<div style='display:flex; align-items:center; gap:6px;'>" +
+          "<button class='sp-btn sp-btn-outline sp-btn-sm' style='padding:2px 9px;' onclick='SP.updateCartQty(" + idx + ", -1)'>−</button>" +
+          "<strong style='min-width:20px; text-align:center;'>" + item.qty + "</strong>" +
+          "<button class='sp-btn sp-btn-outline sp-btn-sm' style='padding:2px 9px;' onclick='SP.updateCartQty(" + idx + ", 1)'>+</button>" +
+          "<strong style='min-width:72px; text-align:right;'>" + fmt(item.price * item.qty) + "</strong></div></div>"
+        ).join("");
+
+      const t = calcCartTotals();
+      document.getElementById("sp-cart-subtotal").textContent = fmt(t.subtotal);
+      document.getElementById("sp-vat-rate-label").textContent = S.config.taxRatePercent + "% Tax (" + S.config.taxMode + ")";
+      document.getElementById("sp-cart-net").textContent = fmt(t.net);
+      document.getElementById("sp-cart-tax").textContent = fmt(t.tax);
+      document.getElementById("sp-cart-total").textContent = fmt(t.total);
+    },
+
+    renderWorkspaces() {
+      // Float Hub
+      document.getElementById("sp-float-wallets-grid").innerHTML = S.floatWallets.map(w =>
+        "<div class='sp-card' style='border-top:4px solid " + w.color + ";'>" +
+        "<div style='display:flex; justify-content:space-between;'><span style='font-size:11px; font-weight:700; color:var(--sp-text-muted);'>" + w.category + "</span>" +
+        "<span class='sp-badge sp-badge-info'>Fee: " + fmt(w.fee) + (w.commissionBps ? " • +" + (w.commissionBps / 100) + "% Rebate" : "") + "</span></div>" +
+        "<div style='font-weight:800; font-size:15px; margin:6px 0;'>" + w.name + "</div>" +
+        "<div style='font-size:22px; font-weight:900; color:" + w.color + ";'>" + fmt(w.balance) + "</div></div>"
+      ).join("");
+      document.getElementById("sp-flt-wallet").innerHTML = S.floatWallets.map(w => "<option value='" + w.code + "'>" + w.name + " (" + fmt(w.balance) + ")</option>").join("");
+      document.getElementById("sp-float-ledger-table").innerHTML =
+        "<thead><tr><th>ID / Time</th><th>Wallet</th><th>Type</th><th>Principal</th><th>Float Delta</th><th>Customer Fee</th><th>Rebate</th><th>Balance After</th><th>Reference</th></tr></thead><tbody>" +
+        S.floatLedger.map(l => "<tr><td><strong>" + l.id + "</strong><br/><small>" + l.time + "</small></td><td><span class='sp-badge sp-badge-info'>" + l.wallet + "</span></td><td>" + l.type + "</td><td>" + fmt(l.principal) + "</td><td style='color:" + (l.delta >= 0 ? "var(--sp-cash)" : "var(--sp-danger)") + "; font-weight:700;'>" + (l.delta >= 0 ? "+" : "") + fmt(l.delta) + "</td><td>" + fmt(l.fee) + "</td><td>" + fmt(l.rebate) + "</td><td><strong>" + fmt(l.balanceAfter) + "</strong></td><td>" + l.ref + "</td></tr>").join("") + "</tbody>";
+
+      // Inventory & BOM
+      const prodOpts = S.products.map(p => "<option value='" + p.id + "'>" + p.name + " (" + p.stockBase + " " + p.baseUom + " @ " + fmt(p.costBase) + ")</option>").join("");
+      document.getElementById("sp-bom-raw").innerHTML = prodOpts;
+      document.getElementById("sp-bom-target").innerHTML = prodOpts;
+      if (S.products.length > 1) document.getElementById("sp-bom-raw").value = "prd_rice_bulk50";
+
+      document.getElementById("sp-inventory-table").innerHTML =
+        "<thead><tr><th>SKU / Product</th><th>Base Stock On Hand</th><th>WAC Unit Cost</th><th>Total Valuation</th><th>Multi-UOM Barcodes & Tiers</th><th>Expiry</th><th>Stocktake</th></tr></thead><tbody>" +
+        S.products.map(p => "<tr><td><strong>" + p.name + "</strong><br/><small>" + p.sku + "</small></td><td><span class='sp-badge " + (p.stockBase <= p.reorderPoint ? "sp-badge-danger" : "sp-badge-success") + "'>" + p.stockBase + " " + p.baseUom + "</span></td><td>" + fmt(p.costBase) + "</td><td><strong>" + fmt(p.stockBase * p.costBase) + "</strong></td><td>" + p.uoms.map(u => "<span class='sp-badge sp-badge-info' style='margin:2px;'>" + u.name + ": " + fmt(u.price) + " [" + u.barcode + "]</span>").join("") + "</td><td>" + p.expiryDate + "</td><td><button class='sp-btn sp-btn-outline sp-btn-sm' onclick="SP.adjustStocktake('" + p.id + "')">📋 Count</button></td></tr>").join("") + "</tbody>";
+
+      document.getElementById("sp-stock-ledger-table").innerHTML =
+        "<thead><tr><th>Time</th><th>Product</th><th>Reason</th><th>Delta (Base)</th><th>Balance After</th><th>WAC Cost</th><th>Reference</th></tr></thead><tbody>" +
+        S.stockMovements.map(m => "<tr><td>" + m.time + "</td><td><strong>" + m.product + "</strong></td><td><span class='sp-badge sp-badge-purple'>" + m.reason + "</span></td><td style='font-weight:800; color:" + (m.delta >= 0 ? "var(--sp-cash)" : "var(--sp-danger)") + ";'>" + (m.delta >= 0 ? "+" : "") + m.delta + "</td><td>" + m.balance + "</td><td>" + fmt(m.wac) + "</td><td>" + m.ref + "</td></tr>").join("") + "</tbody>";
+
+      // Purchasing & Overheads
+      document.getElementById("sp-po-table").innerHTML =
+        "<thead><tr><th>PO #</th><th>Supplier</th><th>Item & Packaging</th><th>Qty</th><th>Landed Total</th><th>Status</th><th>Action</th></tr></thead><tbody>" +
+        S.purchaseOrders.map(po => "<tr><td><strong>" + po.id + "</strong></td><td>" + po.supplierName + "</td><td>" + po.productName + " (" + po.uomName + ")</td><td>" + po.qty + "</td><td><strong>" + fmt(po.qty * po.unitCost + po.freight) + "</strong><br/><small>incl. " + fmt(po.freight) + " freight</small></td><td><span class='sp-badge " + (po.status === "RECEIVED" ? "sp-badge-success" : "sp-badge-warn") + "'>" + po.status + "</span></td><td>" + (po.status === "RECEIVED" ? "✅ Received" : "<button class='sp-btn sp-btn-primary sp-btn-sm' onclick="SP.receivePo('" + po.id + "')">📦 Receive & Update WAC</button>") + "</td></tr>").join("") + "</tbody>";
+
+      document.getElementById("sp-overhead-list").innerHTML = S.overheads.map(o =>
+        "<div class='sp-card-tonal' style='display:flex; justify-content:space-between; align-items:center; gap:8px;'>" +
+        "<div><strong>" + o.title + "</strong><div style='font-size:12px; color:var(--sp-text-muted);'>" + o.category + " • Due " + o.dueDate + "</div></div>" +
+        "<div style='display:flex; align-items:center; gap:10px;'><strong>" + fmt(o.amount) + "</strong>" +
+        (o.isPaid ? "<span class='sp-badge sp-badge-success'>PAID</span>" : "<button class='sp-btn sp-btn-cash sp-btn-sm' onclick="SP.payOverhead('" + o.id + "')">Pay Bill</button>") + "</div></div>"
+      ).join("");
+
+      // Admin ERP & P&L
+      const activeTxs = S.transactions.filter(t => t.status !== "REFUNDED");
+      const grossSales = activeTxs.reduce((s, t) => s + t.total, 0);
+      const netSales = activeTxs.reduce((s, t) => s + t.netSales, 0);
+      const taxTotal = activeTxs.reduce((s, t) => s + t.tax, 0);
+      const cogsTotal = activeTxs.reduce((s, t) => s + t.cogs, 0);
+      const floatIncome = S.floatLedger.reduce((s, l) => s + l.fee + l.rebate, 0);
+      const paidOverheads = S.overheads.filter(o => o.isPaid).reduce((s, o) => s + o.amount, 0);
+      const grossProfit = netSales + floatIncome - cogsTotal;
+      const netProfit = grossProfit - paidOverheads;
+      const totalAr = S.customers.reduce((s, c) => s + c.balance, 0);
+
+      document.getElementById("sp-admin-kpis").innerHTML = [
+        { label: "Gross POS Sales", val: fmt(grossSales), sub: activeTxs.length + " completed receipts" },
+        { label: "Net Sales + Float Fees", val: fmt(netSales + floatIncome), sub: "Float income: " + fmt(floatIncome) },
+        { label: "Cost of Goods Sold (WAC)", val: fmt(cogsTotal), sub: "Gross Profit: " + fmt(grossProfit) },
+        { label: "Net Operating Profit", val: fmt(netProfit), sub: "Tax Payable: " + fmt(taxTotal) + " • AR: " + fmt(totalAr) }
+      ].map(k => "<div class='sp-card'><div style='font-size:12px; font-weight:700; color:var(--sp-text-muted);'>" + k.label + "</div><div style='font-size:24px; font-weight:900; color:var(--sp-primary); margin:6px 0;'>" + k.val + "</div><div style='font-size:11.5px; color:var(--sp-text-muted);'>" + k.sub + "</div></div>").join("");
+
+      document.getElementById("sp-customers-ar-table").innerHTML =
+        "<thead><tr><th>Customer</th><th>Balance (Utang)</th><th>Credit Limit</th><th>Loyalty</th><th>Action</th></tr></thead><tbody>" +
+        S.customers.map(c => "<tr><td><strong>" + c.name + "</strong><br/><small>" + c.phone + "</small></td><td style='color:var(--sp-credit); font-weight:800;'>" + fmt(c.balance) + "</td><td>" + fmt(c.creditLimit) + "</td><td><span class='sp-badge sp-badge-purple'>" + c.points + " pts</span></td><td><button class='sp-btn sp-btn-cash sp-btn-sm' onclick="SP.collectCustomerAr('" + c.id + "')">💵 Collect</button></td></tr>").join("") + "</tbody>";
+
+      document.getElementById("sp-transactions-table").innerHTML =
+        "<thead><tr><th>Receipt #</th><th>Customer & Tender</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>" +
+        S.transactions.map(t => "<tr><td><strong>" + t.id + "</strong><br/><small>" + t.time + "</small></td><td>" + t.customerName + " <span class='sp-badge sp-badge-info'>" + t.tender + "</span></td><td><strong>" + fmt(t.total) + "</strong></td><td><span class='sp-badge " + (t.status === "REFUNDED" ? "sp-badge-danger" : "sp-badge-success") + "'>" + t.status + "</span></td><td><button class='sp-btn sp-btn-outline sp-btn-sm' onclick="SP.showReceiptModal('" + t.id + "')">🧾 Receipt / Return</button></td></tr>").join("") + "</tbody>";
+
+      document.getElementById("sp-gl-table").innerHTML =
+        "<thead><tr><th>Journal ID</th><th>Ref</th><th>Description</th><th>Debits</th><th>Credits</th></tr></thead><tbody>" +
+        S.glJournals.map(g => "<tr><td><strong>" + g.id + "</strong><br/><small>" + g.time + "</small></td><td>" + g.ref + "</td><td>" + g.desc + "</td><td style='color:var(--sp-cash); font-weight:700;'>" + g.debitAccount + "</td><td style='color:var(--sp-primary); font-weight:700;'>" + g.creditAccount + "</td></tr>").join("") + "</tbody>";
+
+      // CFD & Shelf Labels
+      const ct = calcCartTotals();
+      document.getElementById("sp-cfd-live-card").innerHTML =
+        "<h3 style='margin-top:0;'>🖥️ Customer-Facing Display (Secondary Screen)</h3>" +
+        "<div class='sp-card-tonal' style='margin-bottom:12px;'>" +
+        (S.cart.length === 0 ? "<p>Welcome to " + S.config.storeName + "!</p>" : S.cart.map(i => "<div style='display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--sp-outline-variant);'><span>" + i.qty + "x " + i.name + " (" + i.uomName + ")</span><strong>" + fmt(i.qty * i.price) + "</strong></div>").join("")) +
+        "<div style='display:flex; justify-content:space-between; font-size:22px; font-weight:900; padding-top:10px;'><span>TOTAL TO PAY</span><span style='color:var(--sp-primary);'>" + fmt(ct.total) + "</span></div></div>" +
+        "<div class='sp-card-tonal' style='text-align:center;'><strong>📱 Scan Instant QR to Pay (" + S.config.currencyCode + ")</strong><div style='font-family:monospace; font-size:11px; margin-top:6px; color:var(--sp-text-muted);'>storepoint://pay?store=" + encodeURIComponent(S.config.storeName) + "&amount=" + ct.total.toFixed(2) + "</div></div>";
+
+      document.getElementById("sp-shelf-labels-grid").innerHTML = S.products.flatMap(p => p.uoms.map(u =>
+        "<div class='sp-card-tonal' style='border:1.5px dashed var(--sp-outline); text-align:center;'>" +
+        "<div style='font-size:10px; font-weight:700; color:var(--sp-text-muted);'>" + S.config.storeName + "</div>" +
+        "<div style='font-weight:800; font-size:13px; margin:4px 0;'>" + p.name + "</div>" +
+        "<span class='sp-badge sp-badge-info'>" + u.name + "</span>" +
+        "<div style='font-size:20px; font-weight:900; color:var(--sp-primary); margin:6px 0;'>" + fmt(u.price) + "</div>" +
+        "<div style='font-family:monospace; font-size:11px; letter-spacing:2px;'>|| ||| | |||| ||| ||<br/>" + u.barcode + "</div></div>"
+      )).join("");
+    },
+
+    renderAll() {
+      this.renderPosCatalog();
+      this.renderCart();
+      this.renderWorkspaces();
+    }
+  };
+
+  window.SP = SP;
+  window.addEventListener("DOMContentLoaded", () => SP.renderAll());
+  if (document.readyState !== "loading") SP.renderAll();
+})();
+</script>
 </body>
 </html>

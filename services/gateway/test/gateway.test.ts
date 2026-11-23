@@ -265,16 +265,16 @@ describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Cat
     expect(packsRes.statusCode).toBe(200);
     expect(packsRes.json().data.length).toBeGreaterThanOrEqual(5);
 
-    // Phase 7 E2E: Render Live Interactive matraic/m3e ERP + POS Portal at GET /
+    // Phase 7 E2E: Render Live Interactive StorePoint M3 Expressive ERP + POS App at GET /
     const portalRes = await gateway.inject({
       method: "GET",
       url: "/"
     });
     expect(portalRes.statusCode).toBe(200);
     expect(portalRes.headers["content-type"]).toContain("text/html");
-    expect(portalRes.body).toContain("StorePoint Global Showcase Mart");
-    expect(portalRes.body).toContain("<m3e-card");
-    expect(portalRes.body).toContain("Scan to Pay via Instant QR");
-    expect(portalRes.body).toContain("sp-barcode-svg");
+    expect(portalRes.body).toContain("StorePoint Sari-Sari & Mini-Mart");
+    expect(portalRes.body).toContain("Cashier POS");
+    expect(portalRes.body).toContain("GCash / Float Hub");
+    expect(portalRes.body).toContain("Bulk-to-Retail Repackaging BOM Engine");
   });
 });
