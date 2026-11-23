@@ -129,3 +129,6 @@ export function buildShiftReconciliationSlip(
     divider
   ]);
 }
+
+export * from "./shelf-label-designer.js";
+

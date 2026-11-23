@@ -122,6 +122,9 @@ importers:
       '@storepoint/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@storepoint/erp-web':
+        specifier: workspace:*
+        version: link:../../apps/erp-web
       '@storepoint/extensions-service':
         specifier: workspace:*
         version: link:../extensions
@@ -137,6 +140,12 @@ importers:
       '@storepoint/pos-service':
         specifier: workspace:*
         version: link:../pos
+      '@storepoint/pos-web':
+        specifier: workspace:*
+        version: link:../../apps/pos-web
+      '@storepoint/print-bridge':
+        specifier: workspace:*
+        version: link:../../apps/print-bridge
       '@storepoint/purchasing-service':
         specifier: workspace:*
         version: link:../purchasing

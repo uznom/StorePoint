@@ -26,6 +26,7 @@ import { buildPurchasingService } from "@storepoint/purchasing-service";
 import { InMemoryEventBus, ok } from "@storepoint/service-kit";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
+import { seedAndRenderLivePortal } from "./live-portal.js";
 
 export interface GatewayTopologyStatus {
   readonly gateway: ServiceHealthDto;
@@ -361,6 +362,20 @@ export function buildGatewayService(): {
       payload: req.body
     });
     return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.get("/", async (_req, reply) => {
+    const { html } = await seedAndRenderLivePortal({
+      eventBus,
+      identity,
+      catalog,
+      inventory,
+      pos,
+      purchasing,
+      financeCrm,
+      extensions
+    });
+    return reply.type("text/html; charset=utf-8").code(200).send(html);
   });
 
   return {

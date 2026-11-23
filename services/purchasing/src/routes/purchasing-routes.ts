@@ -126,6 +126,31 @@ export function registerPurchasingRoutes(
       }
     }
   );
+
+  app.post<{
+    Body: {
+      organizationId: string;
+      branchId: string;
+      warehouseId: string;
+      supplierId: string;
+      currencyCode: string;
+      lowStockItems: readonly {
+        readonly productId: string;
+        readonly productName: string;
+        readonly uomCode: string;
+        readonly quantityOnHandBase: number;
+        readonly reorderPointBase: number;
+        readonly lastUnitCostMinor: number;
+      }[];
+    };
+  }>("/v1/purchase-orders/smart-reorder", async (req, reply) => {
+    try {
+      const draftPo = await domain.generateSmartReorderDraftPo(req.body);
+      return reply.code(201).send(ok(draftPo));
+    } catch (err) {
+      return handlePurchasingError(err, reply);
+    }
+  });
 }
 
 function handlePurchasingError(

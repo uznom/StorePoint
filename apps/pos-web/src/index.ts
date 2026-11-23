@@ -157,3 +157,6 @@ export function buildPosTerminalM3eHtml(params: {
 export function getPosTerminalThemeCss(theme: "emerald" | "indigo" | "amber" = "emerald"): string {
   return buildM3ExpressiveCssVariables(theme);
 }
+
+export * from "./customer-display-view.js";
+

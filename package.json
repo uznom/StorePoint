@@ -9,6 +9,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "start": "node services/gateway/dist/server.js",
     "build": "corepack pnpm -r run build",
     "test": "vitest run",
     "typecheck": "corepack pnpm -r run typecheck",

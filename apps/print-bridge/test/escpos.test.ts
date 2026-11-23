@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ESCPOS_COMMANDS,
   buildEscPosReceipt,
+  buildPrintableShelfLabelsHtml,
   buildShiftReconciliationSlip
 } from "../src/index.js";
 
@@ -96,5 +97,59 @@ describe("@storepoint/print-bridge — 58mm/80mm ESC/POS Thermal Receipt & Cash 
     const slip = buildShiftReconciliationSlip(shift, 58);
     expect(slip.every((l) => l.length <= 32)).toBe(true);
     expect(slip.some((l) => l.includes("VARIANCE"))).toBe(true);
+  });
+
+  it("Generates printable SVG barcode shelf labels for all UOM variants of a product", () => {
+    const sheet = buildPrintableShelfLabelsHtml({
+      storeName: "Cornerstone Mart",
+      currencyCode: "USD",
+      products: [
+        {
+          id: "prd_1",
+          organizationId: "org_1",
+          categoryId: "cat_1",
+          taxGroupId: null,
+          sku: "BRD-01",
+          name: "Sourdough Bread",
+          description: "",
+          baseUomCode: "loaf",
+          baseUomName: "Single Loaf",
+          baseBarcode: "890111222",
+          basePriceMinor: 500,
+          initialCostMinor: 300,
+          trackInventory: true,
+          trackExpiry: true,
+          isArchived: false,
+          uoms: [
+            {
+              id: "u1",
+              productId: "prd_1",
+              uomCode: "loaf",
+              uomName: "Single Loaf",
+              conversionFactorToBase: 1,
+              barcode: "890111222",
+              priceMinor: 500,
+              isBase: true
+            },
+            {
+              id: "u2",
+              productId: "prd_1",
+              uomCode: "pack2",
+              uomName: "Twin Pack",
+              conversionFactorToBase: 2,
+              barcode: "890111229",
+              priceMinor: 900,
+              isBase: false
+            }
+          ],
+          createdAt: new Date().toISOString()
+        }
+      ]
+    });
+
+    expect(sheet.labels).toHaveLength(2);
+    expect(sheet.printableHtml).toContain("<svg class=\"sp-barcode-svg\"");
+    expect(sheet.printableHtml).toContain("$5.00");
+    expect(sheet.printableHtml).toContain("$9.00");
   });
 });

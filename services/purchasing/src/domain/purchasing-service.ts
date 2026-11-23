@@ -280,4 +280,54 @@ export class PurchasingDomainService {
   ): Promise<readonly OverheadScheduleDto[]> {
     return this.repo.listOverheads(organizationId, unpaidOnly);
   }
+
+  /**
+   * Smart Reorder Auto-PO Generator.
+   * Converts low-stock items into a ready-to-review DRAFT Purchase Order for a preferred supplier.
+   */
+  async generateSmartReorderDraftPo(input: {
+    organizationId: string;
+    branchId: string;
+    warehouseId: string;
+    supplierId: string;
+    currencyCode: string;
+    lowStockItems: readonly {
+      readonly productId: string;
+      readonly productName: string;
+      readonly uomCode: string;
+      readonly quantityOnHandBase: number;
+      readonly reorderPointBase: number;
+      readonly lastUnitCostMinor: number;
+    }[];
+  }): Promise<PurchaseOrderDto> {
+    if (input.lowStockItems.length === 0) {
+      throw new PurchasingDomainError(
+        "ERR_NO_LOW_STOCK_ITEMS",
+        "No low-stock items provided for smart reorder"
+      );
+    }
+
+    const lines: PurchaseOrderLineInput[] = input.lowStockItems.map((item) => {
+      const targetLevel = Math.max(item.reorderPointBase * 2, item.reorderPointBase + 10);
+      const quantityToOrder = Math.max(1, targetLevel - item.quantityOnHandBase);
+      return {
+        productId: item.productId,
+        productName: item.productName,
+        uomCode: item.uomCode,
+        conversionFactorToBase: 1,
+        quantityOrdered: quantityToOrder,
+        unitCostMinor: Math.max(0, item.lastUnitCostMinor)
+      };
+    });
+
+    return this.createPurchaseOrder({
+      organizationId: input.organizationId,
+      branchId: input.branchId,
+      warehouseId: input.warehouseId,
+      supplierId: input.supplierId,
+      currencyCode: input.currencyCode,
+      status: "DRAFT",
+      lines
+    });
+  }
 }

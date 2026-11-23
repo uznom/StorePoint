@@ -100,5 +100,31 @@ describe("@storepoint/purchasing-service — Suppliers, PO Receiving with Landed
     });
     expect(payRes.statusCode).toBe(200);
     expect(payRes.json().data.isPaid).toBe(true);
+
+    // 5. Auto-generate Smart Reorder DRAFT PO from low-stock items
+    const smartRes = await app.inject({
+      method: "POST",
+      url: "/v1/purchase-orders/smart-reorder",
+      payload: {
+        organizationId: orgId,
+        branchId: "br_01",
+        warehouseId: "wh_01",
+        supplierId,
+        currencyCode: "PHP",
+        lowStockItems: [
+          {
+            productId: "prd_rice_bulk",
+            productName: "Jasmine Rice 50kg Sack",
+            uomCode: "sack50",
+            quantityOnHandBase: 2,
+            reorderPointBase: 10,
+            lastUnitCostMinor: 205000
+          }
+        ]
+      }
+    });
+    expect(smartRes.statusCode).toBe(201);
+    expect(smartRes.json().data.status).toBe("DRAFT");
+    expect(smartRes.json().data.lines[0].quantityOrdered).toBe(18);
   });
 });

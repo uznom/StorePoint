@@ -13,11 +13,14 @@
   "dependencies": {
     "@storepoint/catalog-service": "workspace:*",
     "@storepoint/contracts": "workspace:*",
+    "@storepoint/erp-web": "workspace:*",
     "@storepoint/extensions-service": "workspace:*",
     "@storepoint/finance-crm-service": "workspace:*",
     "@storepoint/identity-service": "workspace:*",
     "@storepoint/inventory-service": "workspace:*",
     "@storepoint/pos-service": "workspace:*",
+    "@storepoint/pos-web": "workspace:*",
+    "@storepoint/print-bridge": "workspace:*",
     "@storepoint/purchasing-service": "workspace:*",
     "@storepoint/service-kit": "workspace:*",
     "fastify": "^5.2.1"

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   OfflinePosTerminalStore,
+  buildCustomerFacingDisplayView,
   buildOfflineSaleRecord,
   buildPosTerminalM3eHtml,
   getPosTerminalThemeCss
@@ -59,5 +60,16 @@ describe("@storepoint/pos-web — Offline-First POS Cart, Park/Resume, Outbox & 
     store.markSynced([sale.idempotencyKey]);
     expect(store.listPendingOutbox()).toHaveLength(0);
     expect(getPosTerminalThemeCss("amber")).toContain("--m3e-color-primary:");
+
+    // 6. Render Customer-Facing Display (CFD) with dynamic QR payment payload
+    const cfd = buildCustomerFacingDisplayView({
+      storeName: "Sunrise Mart",
+      registerName: "Counter 1",
+      currencyCode: "PHP",
+      lines: sampleLines
+    });
+    expect(cfd.itemCount).toBe(2);
+    expect(cfd.qrPaymentPayload).toContain("amountMinor=11200");
+    expect(cfd.m3eCfdHtml).toContain("Scan to Pay via Instant QR");
   });
 });
