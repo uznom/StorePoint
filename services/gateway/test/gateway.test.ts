@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildGatewayService } from "../src/index.js";
 
 describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Catalog, Inventory & POS", () => {
-  it("Reports 5 active microservices (identity, catalog, inventory, pos, purchasing) and injects correlation IDs", async () => {
+  it("Reports 6 active microservices (identity, catalog, inventory, pos, purchasing, finance-crm) and injects correlation IDs", async () => {
     const { gateway } = buildGatewayService();
 
     const healthRes = await gateway.inject({ method: "GET", url: "/health" });
@@ -14,7 +14,7 @@ describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Cat
     const online = body.data.upstreamServices.filter(
       (s: { status: string }) => s.status === "online"
     );
-    expect(online).toHaveLength(5);
+    expect(online).toHaveLength(6);
   });
 
   it("Executes end-to-end onboarding -> product creation -> initial stock -> POS multi-UOM sale -> event-driven inventory deduction -> return restock", async () => {
@@ -229,5 +229,32 @@ describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Cat
     });
     expect(bomRes.statusCode).toBe(201);
     expect(bomRes.json().data.finishedUnitCostMinor).toBe(2100);
+
+    // Phase 4 E2E: Create Customer Credit Tab & Charge Store Credit via Gateway
+    const cusRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/finance-crm/customers",
+      payload: {
+        organizationId: orgId,
+        name: "Juan Perez",
+        creditLimitMinor: 100000
+      }
+    });
+    expect(cusRes.statusCode).toBe(201);
+    const customerId = cusRes.json().data.id as string;
+
+    const arChargeRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/finance-crm/customers/credit/charge",
+      payload: {
+        organizationId: orgId,
+        customerId,
+        amountMinor: 25000,
+        referenceId: saleId,
+        actorUserId: ownerId
+      }
+    });
+    expect(arChargeRes.statusCode).toBe(201);
+    expect(arChargeRes.json().data.customer.currentCreditBalanceMinor).toBe(25000);
   });
 });

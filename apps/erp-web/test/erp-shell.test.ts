@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ERP_NAVIGATION_SECTIONS,
   buildErpCatalogInventoryOverview,
+  buildErpFinanceCrmView,
   buildErpPurchasingAndBomView,
   createErpShellConfig
 } from "../src/index.js";
@@ -133,5 +134,44 @@ describe("@storepoint/erp-web — Material 3 Expressive Back-Office ERP Shell & 
     expect(vm.unpaidApTotalFormatted).toBe("$185.00");
     expect(vm.m3eTemplateHtml).toContain("PO-00001 — Pacific Foods");
     expect(vm.m3eTemplateHtml).toContain("Store Electricity Bill");
+  });
+
+  it("Renders matraic/m3e Customer AR Credit Tab & Generalized Float Services Hub view", () => {
+    const vm = buildErpFinanceCrmView({
+      currencyCode: "PHP",
+      customers: [
+        {
+          id: "cus_1",
+          organizationId: "org_1",
+          name: "Lola Nena",
+          phone: "09171234567",
+          email: "",
+          creditLimitMinor: 200000,
+          currentCreditBalanceMinor: 75000,
+          loyaltyPoints: 75,
+          isActive: true,
+          createdAt: new Date().toISOString()
+        }
+      ],
+      floatAccounts: [
+        {
+          id: "flt_1",
+          organizationId: "org_1",
+          branchId: "br_1",
+          providerCode: "GCASH",
+          providerName: "GCash E-Wallet",
+          category: "EWALLET",
+          currencyCode: "PHP",
+          currentBalanceMinor: 1500000,
+          defaultServiceFeeMinor: 1000,
+          commissionBps: 0,
+          updatedAt: new Date().toISOString()
+        }
+      ]
+    });
+
+    expect(vm.activeCreditCustomersCount).toBe(1);
+    expect(vm.m3eTemplateHtml).toContain("Lola Nena");
+    expect(vm.m3eTemplateHtml).toContain("GCash E-Wallet");
   });
 });

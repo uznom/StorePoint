@@ -6,6 +6,8 @@ import type {
   CreateProductInput,
   CreateUserInput,
   ExecuteBomRepackagingInput,
+  ExecuteFloatTransactionInput,
+  FloatServiceCategory,
   PaymentTermsCode,
   PinAuthInput,
   ProcessPosReturnInput,
@@ -14,6 +16,7 @@ import type {
   RecordStockMovementInput,
   ServiceHealthDto
 } from "@storepoint/contracts";
+import { buildFinanceCrmService } from "@storepoint/finance-crm-service";
 import { buildIdentityService } from "@storepoint/identity-service";
 import { buildInventoryService } from "@storepoint/inventory-service";
 import { buildPosService } from "@storepoint/pos-service";
@@ -44,6 +47,7 @@ export function buildGatewayService(): {
   inventory: ReturnType<typeof buildInventoryService>;
   pos: ReturnType<typeof buildPosService>;
   purchasing: ReturnType<typeof buildPurchasingService>;
+  financeCrm: ReturnType<typeof buildFinanceCrmService>;
 } {
   const eventBus = new InMemoryEventBus();
   const identity = buildIdentityService({ eventBus });
@@ -51,6 +55,7 @@ export function buildGatewayService(): {
   const inventory = buildInventoryService({ eventBus });
   const pos = buildPosService({ eventBus });
   const purchasing = buildPurchasingService({ eventBus });
+  const financeCrm = buildFinanceCrmService({ eventBus });
   const gateway = Fastify({ logger: false });
 
   gateway.addHook("onRequest", async (req, reply) => {
@@ -76,7 +81,7 @@ export function buildGatewayService(): {
         { name: "inventory-service", phase: "Phase 1", status: "online" },
         { name: "pos-service", phase: "Phase 2", status: "online" },
         { name: "purchasing-service", phase: "Phase 3", status: "online" },
-        { name: "finance-crm-service", phase: "Phase 4", status: "planned" },
+        { name: "finance-crm-service", phase: "Phase 4", status: "online" },
         { name: "extensions-service", phase: "Phase 6", status: "planned" }
       ]
     };
@@ -263,5 +268,72 @@ export function buildGatewayService(): {
     }
   );
 
-  return { gateway, eventBus, identity, catalog, inventory, pos, purchasing };
+  // Finance & CRM routes
+  gateway.post<{
+    Body: {
+      organizationId: string;
+      name: string;
+      phone?: string;
+      creditLimitMinor?: number;
+    };
+  }>("/api/v1/finance-crm/customers", async (req, reply) => {
+    const upstream = await financeCrm.app.inject({
+      method: "POST",
+      url: "/v1/customers",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{
+    Body: {
+      organizationId: string;
+      customerId: string;
+      amountMinor: number;
+      referenceId: string;
+      actorUserId: string;
+    };
+  }>("/api/v1/finance-crm/customers/credit/charge", async (req, reply) => {
+    const upstream = await financeCrm.app.inject({
+      method: "POST",
+      url: "/v1/customers/credit/charge",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{
+    Body: {
+      organizationId: string;
+      branchId: string;
+      providerCode: string;
+      providerName: string;
+      category: FloatServiceCategory;
+      currencyCode: string;
+      initialBalanceMinor?: number;
+      defaultServiceFeeMinor?: number;
+      commissionBps?: number;
+    };
+  }>("/api/v1/finance-crm/float-accounts", async (req, reply) => {
+    const upstream = await financeCrm.app.inject({
+      method: "POST",
+      url: "/v1/float-accounts",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{ Body: ExecuteFloatTransactionInput }>(
+    "/api/v1/finance-crm/float-accounts/transactions",
+    async (req, reply) => {
+      const upstream = await financeCrm.app.inject({
+        method: "POST",
+        url: "/v1/float-accounts/transactions",
+        payload: req.body
+      });
+      return reply.code(upstream.statusCode).send(upstream.json());
+    }
+  );
+
+  return { gateway, eventBus, identity, catalog, inventory, pos, purchasing, financeCrm };
 }
