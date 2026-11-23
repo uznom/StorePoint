@@ -5,14 +5,19 @@ import type {
   CreateOrganizationInput,
   CreateProductInput,
   CreateUserInput,
+  ExecuteBomRepackagingInput,
+  PaymentTermsCode,
   PinAuthInput,
   ProcessPosReturnInput,
+  PurchaseOrderLineInput,
+  ReceivePurchaseOrderInput,
   RecordStockMovementInput,
   ServiceHealthDto
 } from "@storepoint/contracts";
 import { buildIdentityService } from "@storepoint/identity-service";
 import { buildInventoryService } from "@storepoint/inventory-service";
 import { buildPosService } from "@storepoint/pos-service";
+import { buildPurchasingService } from "@storepoint/purchasing-service";
 import { InMemoryEventBus, ok } from "@storepoint/service-kit";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -28,7 +33,7 @@ export interface GatewayTopologyStatus {
 
 /**
  * Decoupled API Gateway & Auth Edge.
- * Routes traffic across independent domain services (`identity`, `catalog`, `inventory`, `pos`)
+ * Routes traffic across independent domain services (`identity`, `catalog`, `inventory`, `pos`, `purchasing`)
  * connected via the shared EventBus.
  */
 export function buildGatewayService(): {
@@ -38,12 +43,14 @@ export function buildGatewayService(): {
   catalog: ReturnType<typeof buildCatalogService>;
   inventory: ReturnType<typeof buildInventoryService>;
   pos: ReturnType<typeof buildPosService>;
+  purchasing: ReturnType<typeof buildPurchasingService>;
 } {
   const eventBus = new InMemoryEventBus();
   const identity = buildIdentityService({ eventBus });
   const catalog = buildCatalogService({ eventBus });
   const inventory = buildInventoryService({ eventBus });
   const pos = buildPosService({ eventBus });
+  const purchasing = buildPurchasingService({ eventBus });
   const gateway = Fastify({ logger: false });
 
   gateway.addHook("onRequest", async (req, reply) => {
@@ -68,7 +75,7 @@ export function buildGatewayService(): {
         { name: "catalog-service", phase: "Phase 1", status: "online" },
         { name: "inventory-service", phase: "Phase 1", status: "online" },
         { name: "pos-service", phase: "Phase 2", status: "online" },
-        { name: "purchasing-service", phase: "Phase 3", status: "planned" },
+        { name: "purchasing-service", phase: "Phase 3", status: "online" },
         { name: "finance-crm-service", phase: "Phase 4", status: "planned" },
         { name: "extensions-service", phase: "Phase 6", status: "planned" }
       ]
@@ -137,7 +144,7 @@ export function buildGatewayService(): {
     }
   );
 
-  // Inventory routes
+  // Inventory & BOM Repackaging routes
   gateway.post<{
     Body: { organizationId: string; branchId: string; code: string; name: string };
   }>("/api/v1/inventory/warehouses", async (req, reply) => {
@@ -155,6 +162,18 @@ export function buildGatewayService(): {
       const upstream = await inventory.app.inject({
         method: "POST",
         url: "/v1/movements",
+        payload: req.body
+      });
+      return reply.code(upstream.statusCode).send(upstream.json());
+    }
+  );
+
+  gateway.post<{ Body: ExecuteBomRepackagingInput }>(
+    "/api/v1/inventory/bom/repackage",
+    async (req, reply) => {
+      const upstream = await inventory.app.inject({
+        method: "POST",
+        url: "/v1/bom/repackage",
         payload: req.body
       });
       return reply.code(upstream.statusCode).send(upstream.json());
@@ -198,5 +217,51 @@ export function buildGatewayService(): {
     return reply.code(upstream.statusCode).send(upstream.json());
   });
 
-  return { gateway, eventBus, identity, catalog, inventory, pos };
+  // Purchasing routes
+  gateway.post<{
+    Body: {
+      organizationId: string;
+      name: string;
+      paymentTerms?: PaymentTermsCode;
+    };
+  }>("/api/v1/purchasing/suppliers", async (req, reply) => {
+    const upstream = await purchasing.app.inject({
+      method: "POST",
+      url: "/v1/suppliers",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{
+    Body: {
+      organizationId: string;
+      branchId: string;
+      warehouseId: string;
+      supplierId: string;
+      currencyCode: string;
+      lines: readonly PurchaseOrderLineInput[];
+    };
+  }>("/api/v1/purchasing/purchase-orders", async (req, reply) => {
+    const upstream = await purchasing.app.inject({
+      method: "POST",
+      url: "/v1/purchase-orders",
+      payload: req.body
+    });
+    return reply.code(upstream.statusCode).send(upstream.json());
+  });
+
+  gateway.post<{ Body: ReceivePurchaseOrderInput }>(
+    "/api/v1/purchasing/purchase-orders/receive",
+    async (req, reply) => {
+      const upstream = await purchasing.app.inject({
+        method: "POST",
+        url: "/v1/purchase-orders/receive",
+        payload: req.body
+      });
+      return reply.code(upstream.statusCode).send(upstream.json());
+    }
+  );
+
+  return { gateway, eventBus, identity, catalog, inventory, pos, purchasing };
 }

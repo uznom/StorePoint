@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildGatewayService } from "../src/index.js";
 
 describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Catalog, Inventory & POS", () => {
-  it("Reports 4 active microservices (identity, catalog, inventory, pos) and injects correlation IDs", async () => {
+  it("Reports 5 active microservices (identity, catalog, inventory, pos, purchasing) and injects correlation IDs", async () => {
     const { gateway } = buildGatewayService();
 
     const healthRes = await gateway.inject({ method: "GET", url: "/health" });
@@ -14,7 +14,7 @@ describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Cat
     const online = body.data.upstreamServices.filter(
       (s: { status: string }) => s.status === "online"
     );
-    expect(online).toHaveLength(4);
+    expect(online).toHaveLength(5);
   });
 
   it("Executes end-to-end onboarding -> product creation -> initial stock -> POS multi-UOM sale -> event-driven inventory deduction -> return restock", async () => {
@@ -156,5 +156,78 @@ describe("@storepoint/gateway-service — Decoupled Routing Across Identity, Cat
 
     const balanceAfterReturn = await inventory.repo.getBalance(orgId, warehouseId, productId);
     expect(balanceAfterReturn?.quantityOnHandBase).toBe(48);
+
+    // Phase 3 E2E: Create Supplier -> Receive PO (50kg bulk sack) -> EventBus credits inventory -> BOM Repackage into 50x 1kg packs
+    const supRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/purchasing/suppliers",
+      payload: {
+        organizationId: orgId,
+        name: "Distribuidora del Valle",
+        paymentTerms: "NET_15"
+      }
+    });
+    const supplierId = supRes.json().data.id as string;
+
+    const poRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/purchasing/purchase-orders",
+      payload: {
+        organizationId: orgId,
+        branchId,
+        warehouseId,
+        supplierId,
+        currencyCode: "MXN",
+        lines: [
+          {
+            productId: "prd_bulk_sugar_kg",
+            productName: "Azucar Bulto 50kg",
+            uomCode: "sack50",
+            conversionFactorToBase: 50,
+            quantityOrdered: 1,
+            unitCostMinor: 100000 // 20.00 MXN per kg
+          }
+        ]
+      }
+    });
+    const poId = poRes.json().data.id as string;
+
+    const recPoRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/purchasing/purchase-orders/receive",
+      payload: {
+        organizationId: orgId,
+        purchaseOrderId: poId,
+        actorUserId: ownerId,
+        landedFreightCostMinor: 5000, // +1.00 MXN/kg freight -> 21.00 MXN/kg landed WAC!
+        lines: [{ productId: "prd_bulk_sugar_kg", quantityReceivedNow: 1 }]
+      }
+    });
+    expect(recPoRes.statusCode).toBe(200);
+
+    const bulkSugarBal = await inventory.repo.getBalance(
+      orgId,
+      warehouseId,
+      "prd_bulk_sugar_kg"
+    );
+    expect(bulkSugarBal?.quantityOnHandBase).toBe(50);
+    expect(bulkSugarBal?.wacUnitCostMinor).toBe(2100);
+
+    const bomRes = await gateway.inject({
+      method: "POST",
+      url: "/api/v1/inventory/bom/repackage",
+      payload: {
+        organizationId: orgId,
+        warehouseId,
+        currencyCode: "MXN",
+        actorUserId: ownerId,
+        recipeName: "Repack 50kg Sugar into 50x 1kg Bags",
+        rawInputs: [{ rawProductId: "prd_bulk_sugar_kg", quantityConsumedBaseUnits: 50 }],
+        finishedProductId: "prd_retail_sugar_1kg",
+        finishedQuantityProducedBaseUnits: 50
+      }
+    });
+    expect(bomRes.statusCode).toBe(201);
+    expect(bomRes.json().data.finishedUnitCostMinor).toBe(2100);
   });
 });

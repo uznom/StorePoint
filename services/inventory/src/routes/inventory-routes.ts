@@ -1,4 +1,5 @@
 import type {
+  ExecuteBomRepackagingInput,
   ExecuteStocktakeInput,
   RecordStockMovementInput,
   ServiceHealthDto,
@@ -104,6 +105,15 @@ export function registerInventoryRoutes(
     try {
       const adjustments = await domain.executeStocktake(req.body);
       return reply.code(200).send(ok(adjustments));
+    } catch (err) {
+      return handleInventoryError(err, reply);
+    }
+  });
+
+  app.post<{ Body: ExecuteBomRepackagingInput }>("/v1/bom/repackage", async (req, reply) => {
+    try {
+      const res = await domain.executeBomRepackaging(req.body);
+      return reply.code(201).send(ok(res));
     } catch (err) {
       return handleInventoryError(err, reply);
     }

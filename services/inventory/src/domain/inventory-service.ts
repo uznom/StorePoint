@@ -1,5 +1,7 @@
 import type {
   BatchLotBalanceDto,
+  BomRepackagingResultDto,
+  ExecuteBomRepackagingInput,
   ExecuteStocktakeInput,
   RecordStockMovementInput,
   SetReorderPointInput,
@@ -231,6 +233,84 @@ export class InventoryDomainService {
       adjustments.push(movement);
     }
     return adjustments;
+  }
+
+  /**
+   * Bulk Repackaging / Light BOM Engine (upgraded from StorePoint v1).
+   * Atomically consumes bulk raw materials, transfers exact WAC cost to finished retail packs,
+   * and credits finished goods stock.
+   */
+  async executeBomRepackaging(
+    input: ExecuteBomRepackagingInput
+  ): Promise<BomRepackagingResultDto> {
+    if (input.rawInputs.length === 0 || input.finishedQuantityProducedBaseUnits <= 0) {
+      throw new InventoryDomainError(
+        "ERR_INVALID_BOM",
+        "BOM repackaging requires raw inputs and a positive finished output quantity"
+      );
+    }
+
+    const conversionId = `bom_${randomUUID()}`;
+    let totalRawCostMinor = 0;
+    const consumedMovements: StockMovementDto[] = [];
+
+    for (const raw of input.rawInputs) {
+      if (raw.quantityConsumedBaseUnits <= 0) {
+        throw new InventoryDomainError(
+          "ERR_INVALID_BOM_INPUT",
+          "Raw material quantity consumed must be positive"
+        );
+      }
+      const rawBalance = await this.repo.getBalance(
+        input.organizationId,
+        input.warehouseId,
+        raw.rawProductId
+      );
+      const rawWacMinor = rawBalance?.wacUnitCostMinor ?? 0;
+      totalRawCostMinor += raw.quantityConsumedBaseUnits * rawWacMinor;
+
+      const { movement } = await this.recordMovement({
+        organizationId: input.organizationId,
+        warehouseId: input.warehouseId,
+        productId: raw.rawProductId,
+        currencyCode: input.currencyCode,
+        reason: "BOM_CONSUME",
+        deltaBaseUnits: -raw.quantityConsumedBaseUnits,
+        referenceId: conversionId,
+        actorUserId: input.actorUserId,
+        notes: `BOM consume for ${input.recipeName}`
+      });
+      consumedMovements.push(movement);
+    }
+
+    const finishedUnitCostMinor = Math.round(
+      totalRawCostMinor / input.finishedQuantityProducedBaseUnits
+    );
+
+    const { movement: producedMovement, balance: finishedBalance } = await this.recordMovement({
+      organizationId: input.organizationId,
+      warehouseId: input.warehouseId,
+      productId: input.finishedProductId,
+      currencyCode: input.currencyCode,
+      reason: "BOM_PRODUCE",
+      deltaBaseUnits: input.finishedQuantityProducedBaseUnits,
+      unitCostMinor: finishedUnitCostMinor,
+      batchNumber: input.batchNumber ?? null,
+      expirationDate: input.expirationDate ?? null,
+      referenceId: conversionId,
+      actorUserId: input.actorUserId,
+      notes: `BOM produce from ${input.recipeName}`
+    });
+
+    return Object.freeze({
+      conversionId,
+      recipeName: input.recipeName,
+      totalRawCostMinor,
+      finishedUnitCostMinor,
+      consumedMovements: Object.freeze(consumedMovements),
+      producedMovement,
+      finishedBalance
+    });
   }
 
   async listMovements(

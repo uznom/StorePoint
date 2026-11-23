@@ -25,9 +25,25 @@ export interface PosSaleReturnedEventPayload {
   }[];
 }
 
+export interface PurchasingPoReceivedEventPayload {
+  readonly purchaseOrderId: string;
+  readonly poNumber: string;
+  readonly warehouseId: string;
+  readonly currencyCode: string;
+  readonly actorUserId: string;
+  readonly lines: readonly {
+    readonly productId: string;
+    readonly baseUnitsReceived: number;
+    readonly landedBaseUnitCostMinor: number;
+    readonly batchNumber: string | null;
+    readonly expirationDate: string | null;
+  }[];
+}
+
 /**
  * Decoupled EventBus consumers inside `inventory-service`.
- * Automatically deducts or restocks base UOM inventory when `pos-service` emits sale/return events.
+ * Automatically adjusts base UOM inventory & Weighted Average Cost when `pos-service`
+ * or `purchasing-service` emits domain events.
  */
 export function registerInventoryEventConsumers(
   eventBus: EventBus,
@@ -64,4 +80,26 @@ export function registerInventoryEventConsumers(
       });
     }
   });
+
+  eventBus.subscribe<PurchasingPoReceivedEventPayload>(
+    "purchasing.po.received",
+    async (event) => {
+      for (const line of event.payload.lines) {
+        if (line.baseUnitsReceived <= 0) continue;
+        await domain.recordMovement({
+          organizationId: event.organizationId,
+          warehouseId: event.payload.warehouseId,
+          productId: line.productId,
+          currencyCode: event.payload.currencyCode,
+          reason: "PO_RECEIPT",
+          deltaBaseUnits: line.baseUnitsReceived,
+          unitCostMinor: line.landedBaseUnitCostMinor,
+          batchNumber: line.batchNumber,
+          expirationDate: line.expirationDate,
+          referenceId: event.payload.poNumber,
+          actorUserId: event.payload.actorUserId
+        });
+      }
+    }
+  );
 }

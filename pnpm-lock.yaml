@@ -101,6 +101,9 @@ importers:
       '@storepoint/pos-service':
         specifier: workspace:*
         version: link:../pos
+      '@storepoint/purchasing-service':
+        specifier: workspace:*
+        version: link:../purchasing
       '@storepoint/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
@@ -139,6 +142,21 @@ importers:
         version: 5.12.8
 
   services/pos:
+    dependencies:
+      '@storepoint/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@storepoint/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@storepoint/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
+      fastify:
+        specifier: ^5.2.1
+        version: 5.12.8
+
+  services/purchasing:
     dependencies:
       '@storepoint/contracts':
         specifier: workspace:*

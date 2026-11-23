@@ -186,4 +186,78 @@ describe("@storepoint/inventory-service — Immutable Stock Ledger, WAC, FEFO Ex
     });
     expect((await repo.getBalance(orgId, warehouseId, "prd_tea"))?.quantityOnHandBase).toBe(17);
   });
+
+  it("Executes Bulk Repackaging BOM (e.g. 50kg Rice Sack + 50 Polybags -> 50x 1kg Retail Packs) transferring exact WAC cost", async () => {
+    const { app, repo } = buildInventoryService();
+    const orgId = "org_bom_01";
+
+    const whRes = await app.inject({
+      method: "POST",
+      url: "/v1/warehouses",
+      payload: {
+        organizationId: orgId,
+        branchId: "br_01",
+        code: "WH-BOM",
+        name: "Repackaging Room"
+      }
+    });
+    const warehouseId = whRes.json().data.id as string;
+
+    // Seed 100kg bulk rice @ 40.00/kg (4000 minor) and 100 empty 1kg bags @ 1.00/bag (100 minor)
+    await app.inject({
+      method: "POST",
+      url: "/v1/movements",
+      payload: {
+        organizationId: orgId,
+        warehouseId,
+        productId: "prd_bulk_rice_kg",
+        currencyCode: "PHP",
+        reason: "PO_RECEIPT",
+        deltaBaseUnits: 100,
+        unitCostMinor: 4000,
+        actorUserId: "usr_owner"
+      }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/movements",
+      payload: {
+        organizationId: orgId,
+        warehouseId,
+        productId: "prd_empty_bag",
+        currencyCode: "PHP",
+        reason: "PO_RECEIPT",
+        deltaBaseUnits: 100,
+        unitCostMinor: 100,
+        actorUserId: "usr_owner"
+      }
+    });
+
+    // Repackage 50kg bulk rice + 50 empty bags -> 50 x 1kg retail packs (exact unit cost must be 41.00 = 4100 minor!)
+    const bomRes = await app.inject({
+      method: "POST",
+      url: "/v1/bom/repackage",
+      payload: {
+        organizationId: orgId,
+        warehouseId,
+        currencyCode: "PHP",
+        actorUserId: "usr_owner",
+        recipeName: "50kg Sack to 50x 1kg Retail Rice Packs",
+        rawInputs: [
+          { rawProductId: "prd_bulk_rice_kg", quantityConsumedBaseUnits: 50 },
+          { rawProductId: "prd_empty_bag", quantityConsumedBaseUnits: 50 }
+        ],
+        finishedProductId: "prd_retail_rice_1kg",
+        finishedQuantityProducedBaseUnits: 50,
+        batchNumber: "REPACK-2026-01"
+      }
+    });
+    expect(bomRes.statusCode).toBe(201);
+    expect(bomRes.json().data.totalRawCostMinor).toBe(205000);
+    expect(bomRes.json().data.finishedUnitCostMinor).toBe(4100);
+    expect(bomRes.json().data.finishedBalance.quantityOnHandBase).toBe(50);
+    expect(
+      (await repo.getBalance(orgId, warehouseId, "prd_bulk_rice_kg"))?.quantityOnHandBase
+    ).toBe(50);
+  });
 });

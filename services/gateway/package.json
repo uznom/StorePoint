@@ -16,6 +16,7 @@
     "@storepoint/identity-service": "workspace:*",
     "@storepoint/inventory-service": "workspace:*",
     "@storepoint/pos-service": "workspace:*",
+    "@storepoint/purchasing-service": "workspace:*",
     "@storepoint/service-kit": "workspace:*",
     "fastify": "^5.2.1"
   },

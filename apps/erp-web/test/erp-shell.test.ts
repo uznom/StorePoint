@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ERP_NAVIGATION_SECTIONS,
   buildErpCatalogInventoryOverview,
+  buildErpPurchasingAndBomView,
   createErpShellConfig
 } from "../src/index.js";
 
@@ -85,5 +86,52 @@ describe("@storepoint/erp-web — Material 3 Expressive Back-Office ERP Shell & 
     expect(vm.m3eTemplateHtml).toContain("<m3e-card");
     expect(vm.m3eTemplateHtml).toContain("<m3e-chip");
     expect(vm.m3eTemplateHtml).toContain("12-Bag Case (x12)");
+  });
+
+  it("Renders matraic/m3e Purchasing, Bulk Repackaging BOM & Accounts Payable Calendar view", () => {
+    const vm = buildErpPurchasingAndBomView({
+      currencyCode: "USD",
+      purchaseOrders: [
+        {
+          id: "po_1",
+          poNumber: "PO-00001",
+          organizationId: "org_1",
+          branchId: "br_1",
+          warehouseId: "wh_1",
+          supplierId: "sup_1",
+          supplierName: "Pacific Foods",
+          currencyCode: "USD",
+          status: "ORDERED",
+          paymentStatus: "UNPAID",
+          subtotalCostMinor: 50000,
+          landedFreightCostMinor: 2500,
+          totalCostMinor: 52500,
+          lines: [],
+          expectedDeliveryDate: "2026-12-01",
+          receivedAt: null,
+          createdAt: new Date().toISOString()
+        }
+      ],
+      overheads: [
+        {
+          id: "ovh_1",
+          organizationId: "org_1",
+          title: "Store Electricity Bill",
+          category: "UTILITIES",
+          amountMinor: 18500,
+          currencyCode: "USD",
+          dueDate: "2026-12-05",
+          priority: "HIGH",
+          referenceId: "",
+          isPaid: false,
+          paidAt: null
+        }
+      ]
+    });
+
+    expect(vm.openPoCount).toBe(1);
+    expect(vm.unpaidApTotalFormatted).toBe("$185.00");
+    expect(vm.m3eTemplateHtml).toContain("PO-00001 — Pacific Foods");
+    expect(vm.m3eTemplateHtml).toContain("Store Electricity Bill");
   });
 });

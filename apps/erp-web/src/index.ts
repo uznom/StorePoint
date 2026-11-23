@@ -40,4 +40,6 @@ export function createErpShellConfig(options: {
 }
 
 export * from "./catalog-inventory-view.js";
+export * from "./purchasing-bom-view.js";
+
 

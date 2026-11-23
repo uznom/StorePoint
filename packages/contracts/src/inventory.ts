@@ -101,3 +101,32 @@ export interface ExecuteStocktakeInput {
   readonly notes?: string;
   readonly lines: readonly StocktakeCountLineInput[];
 }
+
+export interface BomRawInputLine {
+  readonly rawProductId: string;
+  readonly quantityConsumedBaseUnits: number;
+}
+
+export interface ExecuteBomRepackagingInput {
+  readonly organizationId: string;
+  readonly warehouseId: string;
+  readonly currencyCode: string;
+  readonly actorUserId: string;
+  readonly recipeName: string;
+  readonly rawInputs: readonly BomRawInputLine[];
+  readonly finishedProductId: string;
+  readonly finishedQuantityProducedBaseUnits: number;
+  readonly batchNumber?: string | null;
+  readonly expirationDate?: string | null;
+}
+
+export interface BomRepackagingResultDto {
+  readonly conversionId: string;
+  readonly recipeName: string;
+  readonly totalRawCostMinor: number;
+  readonly finishedUnitCostMinor: number;
+  readonly consumedMovements: readonly StockMovementDto[];
+  readonly producedMovement: StockMovementDto;
+  readonly finishedBalance: StockBalanceDto;
+}
+
