@@ -1,5 +1,5 @@
 [versions]
-agp = "8.13.0"
+agp = "9.1.1"
 orgJson = "20240303"
 coreKtx = "1.13.1"
 junit = "4.13.2"
@@ -9,9 +9,9 @@ lifecycleRuntimeKtx = "2.10.0"
 lifecycleViewmodelCompose = "2.10.0"
 lifecycleRuntimeCompose = "2.10.0"
 activityCompose = "1.9.3"
-kotlin = "2.1.20"
+kotlin = "2.2.10"
 composeBom = "2024.10.01"
-googleDevtoolsKsp = "2.1.20-2.0.0"
+googleDevtoolsKsp = "2.3.5"
 navigationCompose = "2.8.4"
 room = "2.7.2"
 kotlinxCoroutinesTest = "1.9.0"
@@ -23,7 +23,7 @@ cameraCamera2 = "1.4.1"
 cameraLifecycle = "1.4.1"
 cameraView = "1.4.1"
 cameraCore = "1.4.1"
-material3 = "1.4.0"
+material3 = "1.5.0"
 androidxGraphicsShapes = "1.0.1"
 androidxBiometric = "1.1.0"
 
@@ -66,6 +66,5 @@ mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }

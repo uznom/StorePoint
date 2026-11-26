@@ -173,7 +173,7 @@ fun ProductCrudDialog(
                         value = categoryLabel,
                         onValueChange = {},
                         label = { Text("Product Category") },
-                        modifier = Modifier.fillMaxWidth().menuAnchor().testTag("add_pcategory_input"),
+                        modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).testTag("add_pcategory_input"),
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoriesExpanded) }
                     )
                     ExposedDropdownMenu(

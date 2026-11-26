@@ -7,64 +7,38 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v1.0.2.0)'
+        description: 'Release Tag (e.g. v0.0.2)'
         required: true
-        default: 'v1.0.2.0'
+        default: 'v0.0.2'
       release_title:
         description: 'Release Title'
         required: false
-        default: 'StorePoint Release v1.0.2.0'
+        default: 'StorePoint Release v0.0.2'
 
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build-and-release:
-    name: Build & Release Expo Android APK
+    name: Build & Release Android APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: apps/pos-mobile/package-lock.json
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v6
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Install Mobile Dependencies
-        working-directory: apps/pos-mobile
-        run: npm ci
-
-      - name: Run Pre-Release Validation (TypeCheck, Lint & Unit Tests)
-        working-directory: apps/pos-mobile
-        run: |
-          npm run typecheck
-          npm run lint
-          npm test
-
-      - name: Prebuild Android Native Project (Expo CNG)
-        working-directory: apps/pos-mobile
-        run: npx expo prebuild --platform android --non-interactive
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Prepare Android SDK & Keystore
-        working-directory: apps/pos-mobile/android
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -74,13 +48,22 @@ jobs:
 
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ]; then
             echo "Decoding production release keystore from secrets..."
-            echo "$KEYSTORE_BASE64" | base64 --decode > app/my-upload-key.jks
+            echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
           else
-            echo "::warning::Release signing secrets not configured (KEYSTORE_BASE64 + STORE_PASSWORD). Falling back to debug keystore signing."
+            echo "::warning::Release signing secrets not configured (KEYSTORE_BASE64 + STORE_PASSWORD). Generating ephemeral debug keystore fallback."
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      - name: Build Signed Release APK (Primary Artifact)
-        working-directory: apps/pos-mobile/android
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Build Signed Release APK
         env:
           KEYSTORE_PATH: ${{ secrets.KEYSTORE_PATH }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -92,7 +75,7 @@ jobs:
         id: prepare_assets
         run: |
           TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
-          APK_SRC="apps/pos-mobile/android/app/build/outputs/apk/release/app-release.apk"
+          APK_SRC="app/build/outputs/apk/release/app-release.apk"
           mkdir -p release-assets
 
           if [ -f "$APK_SRC" ]; then
@@ -100,7 +83,7 @@ jobs:
             echo "✓ Release APK copied to release-assets/StorePoint-${TAG}.apk"
           else
             echo "::error::Release APK not found at $APK_SRC"
-            find apps/pos-mobile/android/app/build/outputs/apk/ -name "*.apk" 2>/dev/null || echo "(no APK files found)"
+            find app/build/outputs/apk/ -name "*.apk" 2>/dev/null || echo "(no APK files found)"
             exit 1
           fi
 
@@ -126,7 +109,7 @@ jobs:
           fi
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           name: ${{ github.event.inputs.release_title || github.ref_name }}
@@ -140,14 +123,14 @@ jobs:
           files: |
             release-assets/*
           body: |
-            ### StorePoint Point of Sale & Inventory System (React Native Expo + HeroUI Native) 📱
+            ### StorePoint Point of Sale & Inventory System (Android Native — Jetpack Compose)
 
             Pre-compiled standalone Android APK ready for direct installation on Android phones, tablets, and POS terminals.
 
-            #### 📲 Quick Installation Guide:
+            #### Quick Installation Guide:
             1. Download **`StorePoint-${{ github.event.inputs.tag_name || github.ref_name }}.apk`** from the **Assets** section below.
             2. Open the downloaded APK on your Android device.
             3. When prompted, select **Allow from this source** to proceed with installation.
-            4. Launch StorePoint and complete the 2-step store setup wizard.
+            4. Launch StorePoint and complete the store setup wizard.
 
             *Verify SHA-256 checksums from `SHA256SUMS.txt`.*

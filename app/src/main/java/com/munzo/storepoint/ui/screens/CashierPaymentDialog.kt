@@ -22,16 +22,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.munzo.storepoint.data.Product
 import com.munzo.storepoint.data.StorePointRepository
 import com.munzo.storepoint.data.Transaction
 import com.munzo.storepoint.data.TransactionItem
 import com.munzo.storepoint.ui.StorePointViewModel
 import com.munzo.storepoint.ui.components.*
+import com.munzo.storepoint.ui.layout.LocalAdaptiveMetrics
 import com.munzo.storepoint.ui.theme.GCashColor
 import com.munzo.storepoint.ui.theme.LocalReduceMotion
 import com.munzo.storepoint.ui.theme.MayaColor
+import com.munzo.storepoint.ui.theme.TactileHapticRole
+import com.munzo.storepoint.ui.theme.elasticValuePop
 import com.munzo.storepoint.ui.theme.glassPanel
+import com.munzo.storepoint.ui.theme.rememberTactileFeedback
 import com.munzo.storepoint.ui.theme.shakeOnTrigger
 import com.munzo.storepoint.util.DigitalServicesHelper
 import com.munzo.storepoint.util.PendingDigitalService
@@ -56,6 +61,8 @@ fun CashierPaymentDialog(
     var customerNameInput by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
     val reduceMotion = LocalReduceMotion.current
+    val metrics = LocalAdaptiveMetrics.current
+    val tactile = rememberTactileFeedback()
     var shakeTrigger by remember { mutableIntStateOf(0) }
 
     val parsedPayAmount = amountPaidInput.replace(',', '.').toDoubleOrNull() ?: 0.0
@@ -65,11 +72,16 @@ fun CashierPaymentDialog(
     val splitWalletBalance = (totalAmount - parsedSplitCash).coerceAtLeast(0.0)
     val splitCashChange = (parsedSplitCash - totalAmount).coerceAtLeast(0.0)
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         HeroCard(
             modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .widthIn(max = metrics.dialogMaxWidth)
+                .heightIn(max = metrics.heightDp * metrics.dialogMaxHeightFraction)
                 .fillMaxWidth()
-                .padding(bottom = 12.dp)
                 .glassPanel(cornerRadius = 24.dp),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -79,7 +91,7 @@ fun CashierPaymentDialog(
                     .fillMaxWidth()
                     .imePadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
+                    .padding(metrics.cardPadding),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -235,7 +247,13 @@ fun CashierPaymentDialog(
                                         ) {
                                             val changeLabel = if (totalAmount < 0.0) "CASH TO PAY OUT:" else "CHANGE TO RETURN:"
                                             Text(changeLabel, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                            Text("$curr${String.format(Locale.getDefault(), "%.2f", calculatedChange)}", fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                            Text(
+                                                text = "$curr${String.format(Locale.getDefault(), "%.2f", calculatedChange)}",
+                                                fontWeight = FontWeight.ExtraBold,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.elasticValuePop(calculatedChange)
+                                            )
                                         }
                                     }
                                 }
@@ -410,6 +428,7 @@ fun CashierPaymentDialog(
                     onClick = {
                         if (isSubmitting) return@HeroButton
                         if (!isSubmitEnabled) {
+                            tactile.perform(TactileHapticRole.WarningReject)
                             shakeTrigger++
                             return@HeroButton
                         }
@@ -447,6 +466,7 @@ fun CashierPaymentDialog(
                             customerName = finalCustomer,
                             onError = { _ ->
                                 isSubmitting = false
+                                tactile.perform(TactileHapticRole.WarningReject)
                                 shakeTrigger++
                             },
                             onComplete = { tx, items ->

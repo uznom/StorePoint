@@ -1,26 +1,37 @@
 package com.munzo.storepoint.ui.theme
 
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 
 /**
- * Spring configurations matching Material 3 Expressive and Android 17 fluid specifications.
+ * Paired horizontal and vertical scale factors for balanced tactile squash-and-stretch.
+ */
+@Immutable
+data class StretchScale(
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f
+)
+
+/**
+ * Spring configurations matching Material 3 Expressive and StorePoint's balanced tactile feel.
  *
- * Expressive motion uses physically-based, bouncy springs organized into a small set of
- * roles (the M3E "motion tokens"):
- *  - [springBouncy]   / spatial bouncy  (fastSpatial ~350ms): FAB, chip, nav indicator morphs
- *  - [springSnappy]   / default effects (defaultEffects ~350ms): selection, toggles
- *  - [springFluid]    / slow spatial    (~500-1000ms): screen-level containers, sheets
- *  - [pressSpring]    / fast effects    (~200ms): press feedback
+ * Motion tokens:
+ *  - [springBouncy]        : spatial bouncy (FAB, chip, nav indicator morphs)
+ *  - [springSnappy]        : default snappy effects (selection, toggles, counter ticks)
+ *  - [springFluid]         : smooth spatial (screen containers, sheets, pane switches)
+ *  - [pressSpring]         : crisp fast press feedback
+ *  - [tactileStretchSpring]: balanced squash-and-stretch spring (snappy damped rebound)
  */
 object ExpressiveMotion {
-    // Elegant organic spring with delightful natural bounce
+
     fun springBouncy() = spring<Float>(
         dampingRatio = 0.55f,
         stiffness = 250f
@@ -42,22 +53,59 @@ object ExpressiveMotion {
     )
 
     /**
-     * Returns a press-state driven animated scale for an interactive surface, matching the
-     * expressive press-down then settle behavior seen in modern Google surfaces.
+     * Balanced tactile squash-and-stretch spring: crisp ~200ms settle with a subtle,
+     * physically grounded rebound that never slows down high-speed POS tapping.
+     */
+    fun tactileStretchSpring() = spring<Float>(
+        dampingRatio = 0.62f,
+        stiffness = 460f
+    )
+
+    /**
+     * Returns a press-state driven animated uniform scale for an interactive surface.
      */
     @Composable
     fun rememberPressScale(
         interactionSource: MutableInteractionSource,
         targetDown: Float = 0.94f,
         targetUp: Float = 1f,
-        animationSpec: androidx.compose.animation.core.AnimationSpec<Float> = springBouncy(),
+        animationSpec: AnimationSpec<Float> = springBouncy(),
     ): Float {
+        val reduceMotion = LocalReduceMotion.current
         val isPressed by interactionSource.collectIsPressedAsState()
         return animateFloatAsState(
-            targetValue = if (isPressed) targetDown else targetUp,
-            animationSpec = animationSpec,
+            targetValue = if (!reduceMotion && isPressed) targetDown else targetUp,
+            animationSpec = if (reduceMotion) snap() else animationSpec,
             label = "pressScale",
         ).value
+    }
+
+    /**
+     * Returns anisotropic squash-and-stretch scale factors on press:
+     * slightly widens horizontally (`pressScaleX > 1`) while compressing vertically
+     * (`pressScaleY < 1`), then rebounds elastically via [tactileStretchSpring].
+     */
+    @Composable
+    fun rememberStretchScale(
+        interactionSource: MutableInteractionSource,
+        pressScaleX: Float = 1.024f,
+        pressScaleY: Float = 0.948f,
+        animationSpec: AnimationSpec<Float> = tactileStretchSpring()
+    ): StretchScale {
+        val reduceMotion = LocalReduceMotion.current
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val effectiveSpec = if (reduceMotion) snap() else animationSpec
+        val sx by animateFloatAsState(
+            targetValue = if (!reduceMotion && isPressed) pressScaleX else 1f,
+            animationSpec = effectiveSpec,
+            label = "stretchScaleX"
+        )
+        val sy by animateFloatAsState(
+            targetValue = if (!reduceMotion && isPressed) pressScaleY else 1f,
+            animationSpec = effectiveSpec,
+            label = "stretchScaleY"
+        )
+        return StretchScale(scaleX = sx, scaleY = sy)
     }
 }
 

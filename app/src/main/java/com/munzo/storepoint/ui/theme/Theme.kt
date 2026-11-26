@@ -109,10 +109,13 @@ fun StorePointTheme(
       else -> LightColorScheme
     }
 
+  val adaptiveMetrics = com.munzo.storepoint.ui.layout.rememberAdaptiveMetrics()
+
   HeroUIThemeProvider(darkTheme = darkTheme) {
     CompositionLocalProvider(
       LocalReduceMotion provides reduceMotion,
-      LocalExpressiveColors provides if (darkTheme) ExpressiveRolesDark else ExpressiveRolesLight
+      LocalExpressiveColors provides if (darkTheme) ExpressiveRolesDark else ExpressiveRolesLight,
+      com.munzo.storepoint.ui.layout.LocalAdaptiveMetrics provides adaptiveMetrics
     ) {
       MaterialTheme(
         colorScheme = colorScheme,

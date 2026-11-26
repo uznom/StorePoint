@@ -1,33 +1,183 @@
 package com.munzo.storepoint.ui.theme
 
+import android.os.Build
+import android.view.HapticFeedbackConstants
+import android.view.View
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 
 /**
- * Material 3 Expressive micro-interactions.
- *
- * Small, reusable feedback gestures that confirm an action registered without blocking
- * the cashier. Each respects the platform's reduced-motion setting, so accessibility
- * settings are honoured rather than overridden.
- *
- * These follow the Laws of UX principle of immediate, visceral feedback: the user
- * should never have to wait to learn that something was rejected.
+ * Semantic haptic feedback roles for StorePoint POS interactions.
+ * Keeps tactile cues consistent and unobtrusive across high-speed checkout flows.
  */
+enum class TactileHapticRole {
+    /** Standard button, chip, or PIN pad tap. */
+    Tap,
+    /** Barcode scanned or product tile added to cart. */
+    ScanSuccess,
+    /** Cart quantity incremented/decremented or toggle switched. */
+    CartAdjust,
+    /** Checkout completed, shift closed, or form saved. */
+    ConfirmSuccess,
+    /** Wrong PIN, failed scan, out-of-stock, or validation rejection. */
+    WarningReject
+}
+
+/**
+ * Unified haptic dispatcher that maps semantic POS roles to Android haptic constants
+ * with clean API-level fallbacks.
+ */
+class TactileFeedbackController(
+    private val view: View,
+    private val haptic: HapticFeedback
+) {
+    fun perform(role: TactileHapticRole) {
+        val constant = when (role) {
+            TactileHapticRole.Tap -> HapticFeedbackConstants.KEYBOARD_TAP
+            TactileHapticRole.ScanSuccess ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    HapticFeedbackConstants.CONFIRM
+                } else {
+                    HapticFeedbackConstants.VIRTUAL_KEY
+                }
+            TactileHapticRole.CartAdjust -> HapticFeedbackConstants.CLOCK_TICK
+            TactileHapticRole.ConfirmSuccess ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    HapticFeedbackConstants.CONFIRM
+                } else {
+                    HapticFeedbackConstants.LONG_PRESS
+                }
+            TactileHapticRole.WarningReject ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    HapticFeedbackConstants.REJECT
+                } else {
+                    HapticFeedbackConstants.LONG_PRESS
+                }
+        }
+        val handled = runCatching { view.performHapticFeedback(constant) }.getOrDefault(false)
+        if (!handled) {
+            val fallback = when (role) {
+                TactileHapticRole.WarningReject,
+                TactileHapticRole.ConfirmSuccess -> HapticFeedbackType.LongPress
+                else -> HapticFeedbackType.TextHandleMove
+            }
+            runCatching { haptic.performHapticFeedback(fallback) }
+        }
+    }
+}
+
+@Composable
+fun rememberTactileFeedback(): TactileFeedbackController {
+    val view = LocalView.current
+    val haptic = LocalHapticFeedback.current
+    return remember(view, haptic) { TactileFeedbackController(view, haptic) }
+}
+
+/**
+ * Balanced tactile squash-and-stretch press modifier.
+ * Slightly stretches along X while compressing along Y during press, then snaps back
+ * elastically via [ExpressiveMotion.tactileStretchSpring]. Honors [LocalReduceMotion].
+ */
+@Composable
+fun Modifier.springStretchPress(
+    interactionSource: MutableInteractionSource,
+    enabled: Boolean = true,
+    pressScaleX: Float = 1.024f,
+    pressScaleY: Float = 0.948f,
+    pressTranslationY: Float = 1.5f
+): Modifier {
+    val reduceMotion = LocalReduceMotion.current
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val active = enabled && !reduceMotion && isPressed
+    val spec = if (reduceMotion) snap<Float>() else ExpressiveMotion.tactileStretchSpring()
+
+    val sx by animateFloatAsState(
+        targetValue = if (active) pressScaleX else 1f,
+        animationSpec = spec,
+        label = "springStretchX"
+    )
+    val sy by animateFloatAsState(
+        targetValue = if (active) pressScaleY else 1f,
+        animationSpec = spec,
+        label = "springStretchY"
+    )
+    val ty by animateFloatAsState(
+        targetValue = if (active) pressTranslationY else 0f,
+        animationSpec = spec,
+        label = "springStretchTY"
+    )
+
+    return this.graphicsLayer {
+        scaleX = sx
+        scaleY = sy
+        translationY = ty
+    }
+}
+
+/**
+ * Elastic pop-and-stretch whenever [valueKey] changes (e.g., cart item count, running total,
+ * or badge counter). Skips initial composition so screens enter calmly.
+ */
+@Composable
+fun Modifier.elasticValuePop(
+    valueKey: Any?,
+    enabled: Boolean = true
+): Modifier {
+    val reduceMotion = LocalReduceMotion.current
+    val sx = remember { Animatable(1f) }
+    val sy = remember { Animatable(1f) }
+    var initialized by remember { mutableStateOf(false) }
+
+    LaunchedEffect(valueKey, enabled, reduceMotion) {
+        if (!initialized) {
+            initialized = true
+            return@LaunchedEffect
+        }
+        if (reduceMotion || !enabled) return@LaunchedEffect
+        try {
+            sx.snapTo(1.09f)
+            sy.snapTo(0.93f)
+            sx.animateTo(1f, ExpressiveMotion.tactileStretchSpring())
+        } finally {
+            sx.snapTo(1f)
+            sy.snapTo(1f)
+        }
+    }
+    LaunchedEffect(valueKey, enabled, reduceMotion) {
+        if (!initialized || reduceMotion || !enabled) return@LaunchedEffect
+        try {
+            sy.animateTo(1.04f, tween(durationMillis = 70))
+            sy.animateTo(1f, ExpressiveMotion.tactileStretchSpring())
+        } finally {
+            sy.snapTo(1f)
+        }
+    }
+
+    return this.graphicsLayer {
+        scaleX = sx.value
+        scaleY = sy.value
+    }
+}
 
 /**
  * Horizontally shakes the content whenever [trigger] increments.
- *
- * Used for rejected input (wrong PIN, failed scan) where an error message alone may be
- * missed during a busy checkout. The shake is a *secondary* cue — always paired with
- * visible text and colour, never as the only signal.
- *
- * @param trigger increment this to fire a shake.
- * @param amplitude peak horizontal displacement in dp.
+ * Used for rejected input (wrong PIN, failed scan) paired with visible text and color.
  */
 @Composable
 fun Modifier.shakeOnTrigger(
@@ -38,16 +188,14 @@ fun Modifier.shakeOnTrigger(
     val reduceMotion = LocalReduceMotion.current
     val offset = remember { Animatable(0f) }
 
-    androidx.compose.runtime.LaunchedEffect(trigger, enabled, reduceMotion) {
+    LaunchedEffect(trigger, enabled, reduceMotion) {
         if (reduceMotion || !enabled || trigger == 0) return@LaunchedEffect
         try {
-            // Three decaying oscillations: enough to read as "rejected" without
-            // feeling punitive or slowing the retry.
             val steps = intArrayOf(1, -1, 1, -1, 0)
             for (factor in steps) {
                 offset.animateTo(
                     targetValue = factor * amplitude,
-                    animationSpec = tween(durationMillis = 50)
+                    animationSpec = tween(durationMillis = 48)
                 )
             }
         } finally {
@@ -58,10 +206,7 @@ fun Modifier.shakeOnTrigger(
 }
 
 /**
- * Briefly scales the content up and settles it back, acknowledging a success.
- *
- * Paired with the Peak-End Rule: the emotional peak of a POS interaction is the moment
- * of confirmed sale, so that moment gets the strongest celebratory feedback.
+ * Briefly stretches and settles the content, acknowledging a confirmed sale or save.
  */
 @Composable
 fun Modifier.celebratePulse(
@@ -69,35 +214,42 @@ fun Modifier.celebratePulse(
     enabled: Boolean = true
 ): Modifier {
     val reduceMotion = LocalReduceMotion.current
-    val scale = remember { Animatable(1f) }
+    val sx = remember { Animatable(1f) }
+    val sy = remember { Animatable(1f) }
 
-    androidx.compose.runtime.LaunchedEffect(trigger, enabled, reduceMotion) {
+    LaunchedEffect(trigger, enabled, reduceMotion) {
         if (reduceMotion || !enabled || trigger == 0) return@LaunchedEffect
         try {
-            scale.animateTo(1.08f, tween(durationMillis = 120))
-            scale.animateTo(1f, ExpressiveMotion.springSnappy())
+            sx.animateTo(1.07f, tween(durationMillis = 95))
+            sx.animateTo(1f, ExpressiveMotion.tactileStretchSpring())
         } finally {
-            scale.snapTo(1f)
+            sx.snapTo(1f)
+        }
+    }
+    LaunchedEffect(trigger, enabled, reduceMotion) {
+        if (reduceMotion || !enabled || trigger == 0) return@LaunchedEffect
+        try {
+            sy.animateTo(0.96f, tween(durationMillis = 55))
+            sy.animateTo(1.06f, tween(durationMillis = 85))
+            sy.animateTo(1f, ExpressiveMotion.tactileStretchSpring())
+        } finally {
+            sy.snapTo(1f)
         }
     }
     return this.graphicsLayer {
-        scaleX = scale.value
-        scaleY = scale.value
+        scaleX = sx.value
+        scaleY = sy.value
     }
 }
 
 /**
- * Lifts the content slightly while pressed, then settles with an overshoot.
- *
- * Complements the shape-morph already provided by ExpressiveButton so touch targets
- * respond in two channels (position + silhouette) — reinforcing the press for users
- * who may not be looking directly at the control.
+ * Lifts the content slightly while pressed, then settles with a snappy spring.
  */
 @Composable
 fun Modifier.pressLift(pressed: Boolean, lift: Float = 4f): Modifier {
     val reduceMotion = LocalReduceMotion.current
     val shouldAnimate = !reduceMotion
-    val translation = androidx.compose.animation.core.animateFloatAsState(
+    val translation = animateFloatAsState(
         targetValue = if (shouldAnimate && pressed) -lift else 0f,
         animationSpec = if (reduceMotion) snap() else ExpressiveMotion.pressSpring(),
         label = "pressLift"

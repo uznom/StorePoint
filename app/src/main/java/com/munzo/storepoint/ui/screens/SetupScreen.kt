@@ -39,12 +39,13 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.munzo.storepoint.ui.StorePointViewModel
-import com.munzo.storepoint.ui.layout.rememberWindowLayout
-import com.munzo.storepoint.ui.layout.WindowLayout
+import com.munzo.storepoint.ui.layout.LocalAdaptiveMetrics
 import com.munzo.storepoint.ui.theme.ExpressiveButtonShape
 import com.munzo.storepoint.ui.theme.ExpressiveSectionHeader
+import com.munzo.storepoint.ui.theme.TactileHapticRole
 import com.munzo.storepoint.ui.theme.tactileBounce
 import com.munzo.storepoint.ui.theme.glassPanel
+import com.munzo.storepoint.ui.theme.rememberTactileFeedback
 
 import com.munzo.storepoint.ui.components.*
 import com.munzo.storepoint.ui.theme.HeroUITheme
@@ -75,9 +76,9 @@ fun SetupScreen(viewModel: StorePointViewModel) {
 
     var activeStep by remember { mutableStateOf(1) } // Step 1: Profile & Money, Step 2: Security
 
-    // Force expanded mode for reliable input display on all devices
-    // This ensures inputs are always visible regardless of screen size
-    val mockExpanded = true
+    val metrics = LocalAdaptiveMetrics.current
+    val tactile = rememberTactileFeedback()
+    val mockExpanded = !metrics.isCompactWidth
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -116,9 +117,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
         }
     }
 
-    val heroWindowSize = rememberHeroWindowSize()
-    // Always expanded for reliable input display
-    val isExpanded = true
+    val isExpanded = !metrics.isCompactWidth
 
     Scaffold(
         topBar = {
@@ -146,9 +145,9 @@ fun SetupScreen(viewModel: StorePointViewModel) {
         ) {
             Column(
                 modifier = Modifier
-                    .widthIn(max = if (isExpanded) 760.dp else 560.dp)
+                    .widthIn(max = metrics.maxFormWidth)
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .padding(horizontal = metrics.screenPadding, vertical = metrics.sectionSpacing)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top
@@ -341,7 +340,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) },
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .menuAnchor()
+                                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                                 .testTag("currency_selector_input"),
                                             shape = HeroUITheme.radius.md
                                         )
@@ -387,7 +386,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .menuAnchor()
+                                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                             .testTag("currency_selector_input"),
                                         shape = HeroUITheme.radius.md
                                     )
@@ -650,10 +649,14 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                         onClick = {
                             if (activeStep == 1) {
                                 if (storeName.isNotBlank() && taxPercentageStr.toDoubleOrNull() != null) {
+                                    tactile.perform(TactileHapticRole.Tap)
                                     activeStep = 2
+                                } else {
+                                    tactile.perform(TactileHapticRole.WarningReject)
                                 }
                             } else {
                                 if (!isDeviceAdminActive) {
+                                    tactile.perform(TactileHapticRole.WarningReject)
                                     Toast.makeText(context, "Please activate Device Administrator first to secure this POS terminal.", Toast.LENGTH_LONG).show()
                                     try {
                                         val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
@@ -668,6 +671,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                     return@HeroButton
                                 }
                                 if (adminUsername.isNotBlank() && SecurityHelper.isValidPin(adminPassword)) {
+                                    tactile.perform(TactileHapticRole.ConfirmSuccess)
                                     viewModel.completeInitialSetup(
                                         storeName = storeName.trim(),
                                         currency = currencySymbol,
@@ -686,6 +690,8 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                         mayaServiceFee = mayaFeeStr.toDoubleOrNull() ?: 10.0,
                                         mayaBankFee = mayaBankFeeStr.toDoubleOrNull() ?: 15.0
                                     )
+                                } else {
+                                    tactile.perform(TactileHapticRole.WarningReject)
                                 }
                             }
                         },

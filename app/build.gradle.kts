@@ -1,24 +1,23 @@
 plugins {
   alias(libs.plugins.android.application)
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
 }
 
 android {
   namespace = "com.munzo.storepoint"
-  compileSdk = 36
+  compileSdk = 37
 
   defaultConfig {
     applicationId = "com.munzo.storepoint"
-    minSdk = 23
+    minSdk = 24
     targetSdk = 36
     // versionName MUST match the release tag (minus the leading "v").
     // AppUpdateManager.isVersionNewer() compares the newest GitHub release tag
     // against BuildConfig.VERSION_NAME; if these drift, a terminal that has already
     // installed the latest APK is told an update is available forever.
-    versionCode = 111
-    versionName = "1.0.2.5"
+    versionCode = 2
+    versionName = "0.0.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -57,9 +56,6 @@ android {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
   }
-  kotlinOptions {
-    jvmTarget = "17"
-  }
   buildFeatures {
     compose = true
     buildConfig = true
@@ -74,7 +70,9 @@ android {
 }
 
 kotlin {
-  jvmToolchain(17)
+  compilerOptions {
+    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+  }
 }
 
 ksp {
