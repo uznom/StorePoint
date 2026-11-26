@@ -75,6 +75,10 @@ fun SetupScreen(viewModel: StorePointViewModel) {
 
     var activeStep by remember { mutableStateOf(1) } // Step 1: Profile & Money, Step 2: Security
 
+    // Force expanded mode for reliable input display on all devices
+    // This ensures inputs are always visible regardless of screen size
+    val mockExpanded = true
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -113,7 +117,8 @@ fun SetupScreen(viewModel: StorePointViewModel) {
     }
 
     val heroWindowSize = rememberHeroWindowSize()
-    val isExpanded = heroWindowSize == HeroWindowSize.Expanded
+    // Always expanded for reliable input display
+    val isExpanded = true
 
     Scaffold(
         topBar = {
@@ -305,7 +310,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                 iconColor = HeroUITheme.colors.accent
                             )
 
-                            if (isExpanded) {
+                            if (mockExpanded) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(16.dp)
