@@ -28,48 +28,71 @@ internal object BackupJsonImporter {
             val tables = root.getJSONObject("tables")
             val backupDate = root.optString("dateTime", "Unknown Date")
 
+            if (!BackupIntegrityCodec.verifyChecksum(root, tables)) {
+                return@withContext DatabaseBackupManager.RestoreSummary(
+                    success = false,
+                    message = "Backup integrity check failed: checksum mismatch detected. No existing data was modified."
+                )
+            }
+
             var importedProducts = 0
             var importedTransactions = 0
             var importedUsers = 0
+            var fkViolationCount = 0
 
-            db.runInTransaction {
-                val sqlDb = db.openHelper.writableDatabase
-                try {
-                    sqlDb.execSQL("PRAGMA foreign_keys = OFF;")
-                } catch (_: Exception) {}
+            val sqlDb = db.openHelper.writableDatabase
+            // PRAGMA foreign_keys must be toggled OUTSIDE any active transaction in SQLite;
+            // running it inside a transaction is silently ignored by SQLite.
+            try {
+                sqlDb.execSQL("PRAGMA foreign_keys = OFF;")
+            } catch (_: Exception) {}
 
-                try {
+            try {
+                db.runInTransaction {
                     db.clearAllTables()
                     restoreStoreConfig(sqlDb, tables)
                     importedUsers = restoreUsers(sqlDb, tables)
                     restoreCategories(sqlDb, tables)
                     importedProducts = restoreProducts(sqlDb, tables)
+                    restoreProductVariants(sqlDb, tables)
                     restoreCashierSessions(sqlDb, tables)
+                    restoreDrawerTransactions(sqlDb, tables)
                     importedTransactions = restoreTransactions(sqlDb, tables)
                     restoreTransactionItems(sqlDb, tables)
-                    restoreDrawerTransactions(sqlDb, tables)
-                    restorePaymentSchedules(sqlDb, tables)
-                    restoreProductVariants(sqlDb, tables)
                     restoreReturns(sqlDb, tables)
                     restoreSuppliersAndPurchaseOrders(sqlDb, tables)
                     restoreParkedTransactions(sqlDb, tables)
-                } finally {
-                    try {
-                        sqlDb.execSQL("PRAGMA foreign_keys = ON;")
-                    } catch (_: Exception) {}
+                    restorePaymentSchedules(sqlDb, tables)
+                    restoreCustomerCreditLedger(sqlDb, tables)
+                    BackupJsonExtendedTables.restoreAll(sqlDb, tables)
                 }
+            } finally {
+                try {
+                    sqlDb.execSQL("PRAGMA foreign_keys = ON;")
+                } catch (_: Exception) {}
             }
 
+            try {
+                sqlDb.query("PRAGMA foreign_key_check").use { cursor ->
+                    while (cursor.moveToNext()) {
+                        fkViolationCount++
+                    }
+                }
+            } catch (_: Exception) {}
+
             val exportErrCount = root.optJSONArray("exportErrors")?.length() ?: 0
-            val exportWarning = if (exportErrCount > 0) {
-                " WARNING: this backup was created with $exportErrCount table export error(s) and may be incomplete."
-            } else {
-                ""
+            val warnings = buildString {
+                if (exportErrCount > 0) {
+                    append(" WARNING: this backup was created with $exportErrCount table export error(s) and may be incomplete.")
+                }
+                if (fkViolationCount > 0) {
+                    append(" WARNING: $fkViolationCount referential integrity anomaly(ies) detected after restore.")
+                }
             }
 
             DatabaseBackupManager.RestoreSummary(
                 success = true,
-                message = "Database successfully restored from backup created on $backupDate$exportWarning",
+                message = "Database successfully restored from backup created on $backupDate$warnings",
                 productsCount = importedProducts,
                 transactionsCount = importedTransactions,
                 usersCount = importedUsers,
@@ -97,15 +120,26 @@ internal object BackupJsonImporter {
             hasMaya = cfgObj.optBoolean("hasMaya", true),
             hasLoad = cfgObj.optBoolean("hasLoad", true),
             smartLoadBalance = cfgObj.optDouble("smartLoadBalance", 0.0),
-            globeLoadBalance = cfgObj.optDouble("globeLoadBalance", 0.0)
+            globeLoadBalance = cfgObj.optDouble("globeLoadBalance", 0.0),
+            loadServiceFee = cfgObj.optDouble("loadServiceFee", 2.0),
+            gcashServiceFee = cfgObj.optDouble("gcashServiceFee", 10.0),
+            mayaServiceFee = cfgObj.optDouble("mayaServiceFee", 10.0),
+            mayaBankFee = cfgObj.optDouble("mayaBankFee", 15.0)
         )
         sqlDb.execSQL(
-            "INSERT OR REPLACE INTO store_config (id, storeName, currencySymbol, taxPercentage, setupCompleted, gcashBalance, hasGCash, hasMaya, hasLoad, smartLoadBalance, globeLoadBalance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            """
+            INSERT OR REPLACE INTO store_config (
+                id, storeName, currencySymbol, taxPercentage, setupCompleted,
+                gcashBalance, hasGCash, hasMaya, hasLoad, smartLoadBalance, globeLoadBalance,
+                loadServiceFee, gcashServiceFee, mayaServiceFee, mayaBankFee
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent(),
             arrayOf<Any?>(
                 cfg.id, cfg.storeName, cfg.currencySymbol, cfg.taxPercentage,
                 if (cfg.setupCompleted) 1 else 0, cfg.gcashBalance,
                 if (cfg.hasGCash) 1 else 0, if (cfg.hasMaya) 1 else 0,
-                if (cfg.hasLoad) 1 else 0, cfg.smartLoadBalance, cfg.globeLoadBalance
+                if (cfg.hasLoad) 1 else 0, cfg.smartLoadBalance, cfg.globeLoadBalance,
+                cfg.loadServiceFee, cfg.gcashServiceFee, cfg.mayaServiceFee, cfg.mayaBankFee
             )
         )
     }
@@ -117,8 +151,15 @@ internal object BackupJsonImporter {
             val u = usersArr.getJSONObject(i)
             val storedPinHash = if (u.has("pinHash")) u.getString("pinHash") else u.optString("passwordHash", "")
             sqlDb.execSQL(
-                "INSERT OR REPLACE INTO user_accounts (username, pinHash, role, barcodeId) VALUES (?, ?, ?, ?)",
-                arrayOf<Any?>(u.getString("username"), storedPinHash, u.getString("role"), u.optString("barcodeId", ""))
+                "INSERT OR REPLACE INTO user_accounts (username, pinHash, role, barcodeId, biometricEnrolled, pinResetRequired) VALUES (?, ?, ?, ?, ?, ?)",
+                arrayOf<Any?>(
+                    u.getString("username"),
+                    storedPinHash,
+                    u.getString("role"),
+                    u.optString("barcodeId", ""),
+                    if (u.optBoolean("biometricEnrolled", false)) 1 else 0,
+                    if (u.optBoolean("pinResetRequired", false)) 1 else 0
+                )
             )
         }
         return usersArr.length()
@@ -130,8 +171,14 @@ internal object BackupJsonImporter {
         for (i in 0 until catArr.length()) {
             val c = catArr.getJSONObject(i)
             sqlDb.execSQL(
-                "INSERT OR REPLACE INTO categories (id, name) VALUES (?, ?)",
-                arrayOf<Any?>(c.getInt("id"), c.getString("name"))
+                "INSERT OR REPLACE INTO categories (id, name, colorAccent, iconBadge, isArchived) VALUES (?, ?, ?, ?, ?)",
+                arrayOf<Any?>(
+                    c.getInt("id"),
+                    c.getString("name"),
+                    c.optString("colorAccent", ""),
+                    c.optString("iconBadge", ""),
+                    if (c.optBoolean("isArchived", false)) 1 else 0
+                )
             )
         }
     }
@@ -147,8 +194,9 @@ internal object BackupJsonImporter {
                     id, name, categoryId, price, stockCount, barcode, expirationDate, cost,
                     hasStick10s, priceStick10s, hasStick20s, priceStick20s, hasReam, priceReam, hasMasterCase, priceMasterCase,
                     hasCustomUom, customUomName, customUomMultiplier, customUomPrice,
-                    barcode10s, barcode20s, barcodeReam, barcodeMasterCase, barcodeCustomUom, baseUom
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    barcode10s, barcode20s, barcodeReam, barcodeMasterCase, barcodeCustomUom, baseUom,
+                    trackInventory, isArchived, isQuickSellPinned
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
                 arrayOf<Any?>(
                     p.getInt("id"),
@@ -176,7 +224,10 @@ internal object BackupJsonImporter {
                     p.optString("barcodeReam", ""),
                     p.optString("barcodeMasterCase", ""),
                     p.optString("barcodeCustomUom", ""),
-                    p.optString("baseUom", "pc")
+                    p.optString("baseUom", "pc"),
+                    if (p.optBoolean("trackInventory", true)) 1 else 0,
+                    if (p.optBoolean("isArchived", false)) 1 else 0,
+                    if (p.optBoolean("isQuickSellPinned", false)) 1 else 0
                 )
             )
         }
@@ -194,9 +245,9 @@ internal object BackupJsonImporter {
                     s.getInt("id"),
                     s.getString("cashierUsername"),
                     s.getLong("startTime"),
-                    if (s.has("endTime")) s.getLong("endTime") else null,
+                    if (!s.isNull("endTime")) s.getLong("endTime") else null,
                     s.getDouble("startingCash"),
-                    if (s.has("endingCash")) s.getDouble("endingCash") else null,
+                    if (!s.isNull("endingCash")) s.getDouble("endingCash") else null,
                     s.getString("status")
                 )
             )
@@ -234,7 +285,7 @@ internal object BackupJsonImporter {
         for (i in 0 until itemArr.length()) {
             val item = itemArr.getJSONObject(i)
             sqlDb.execSQL(
-                "INSERT OR REPLACE INTO transaction_items (id, transactionId, productId, productName, price, quantity, cost, uomName) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO transaction_items (id, transactionId, productId, productName, price, quantity, cost, uomName, discountAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 arrayOf<Any?>(
                     item.getInt("id"),
                     item.getInt("transactionId"),
@@ -243,7 +294,8 @@ internal object BackupJsonImporter {
                     item.getDouble("price"),
                     item.getInt("quantity"),
                     item.optDouble("cost", 0.0),
-                    item.optString("uomName", "pc")
+                    item.optString("uomName", "pc"),
+                    item.optDouble("discountAmount", 0.0)
                 )
             )
         }
@@ -296,7 +348,7 @@ internal object BackupJsonImporter {
         for (i in 0 until varArr.length()) {
             val v = varArr.getJSONObject(i)
             sqlDb.execSQL(
-                "INSERT OR REPLACE INTO product_variants (id, productId, variantName, uomName, multiplier, price, cost, barcode, isDefault) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO product_variants (id, productId, variantName, uomName, multiplier, price, cost, barcode, isDefault, stockCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 arrayOf<Any?>(
                     v.getInt("id"),
                     v.getInt("productId"),
@@ -306,7 +358,8 @@ internal object BackupJsonImporter {
                     v.getDouble("price"),
                     v.optDouble("cost", 0.0),
                     v.optString("barcode", ""),
-                    if (v.optBoolean("isDefault", false)) 1 else 0
+                    if (v.optBoolean("isDefault", false)) 1 else 0,
+                    v.optInt("stockCount", 0)
                 )
             )
         }
@@ -390,8 +443,8 @@ internal object BackupJsonImporter {
                         po.getInt("supplierId"),
                         po.getString("supplierName"),
                         po.getLong("orderDate"),
-                        if (po.has("expectedDeliveryDate")) po.getLong("expectedDeliveryDate") else null,
-                        if (po.has("receivedDate")) po.getLong("receivedDate") else null,
+                        if (!po.isNull("expectedDeliveryDate")) po.getLong("expectedDeliveryDate") else null,
+                        if (!po.isNull("receivedDate")) po.getLong("receivedDate") else null,
                         po.getDouble("totalCost"),
                         po.optString("status", "ORDERED"),
                         po.optString("paymentStatus", "UNPAID"),
@@ -440,14 +493,63 @@ internal object BackupJsonImporter {
             for (i in 0 until pItemArr.length()) {
                 val pi = pItemArr.getJSONObject(i)
                 sqlDb.execSQL(
-                    "INSERT OR REPLACE INTO parked_transaction_items (id, parkedTransactionId, productId, productName, price, quantity) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT OR REPLACE INTO parked_transaction_items (id, parkedTransactionId, productId, productName, price, quantity, uomName, uomMultiplier, discountAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     arrayOf<Any?>(
                         pi.getInt("id"),
                         pi.getInt("parkedTransactionId"),
                         pi.getInt("productId"),
                         pi.getString("productName"),
                         pi.getDouble("price"),
-                        pi.getInt("quantity")
+                        pi.getInt("quantity"),
+                        pi.optString("uomName", "Base Unit"),
+                        pi.optInt("uomMultiplier", 1),
+                        pi.optDouble("discountAmount", 0.0)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun restoreCustomerCreditLedger(sqlDb: SupportSQLiteDatabase, tables: JSONObject) {
+        if (tables.has("customer_accounts")) {
+            val custArr = tables.getJSONArray("customer_accounts")
+            for (i in 0 until custArr.length()) {
+                val c = custArr.getJSONObject(i)
+                sqlDb.execSQL(
+                    "INSERT OR REPLACE INTO customer_accounts (id, name, phone, address, creditLimit, currentBalance, notes, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf<Any?>(
+                        c.getInt("id"),
+                        c.getString("name"),
+                        c.optString("phone", ""),
+                        c.optString("address", ""),
+                        c.optDouble("creditLimit", 1000.0),
+                        c.optDouble("currentBalance", 0.0),
+                        c.optString("notes", ""),
+                        if (c.optBoolean("isActive", true)) 1 else 0,
+                        c.optLong("createdAt", System.currentTimeMillis()),
+                        c.optLong("updatedAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        if (tables.has("customer_credit_ledger")) {
+            val ledArr = tables.getJSONArray("customer_credit_ledger")
+            for (i in 0 until ledArr.length()) {
+                val l = ledArr.getJSONObject(i)
+                sqlDb.execSQL(
+                    "INSERT OR REPLACE INTO customer_credit_ledger (id, customerId, timestamp, actorUsername, type, amount, balanceAfter, paymentMethod, transactionId, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf<Any?>(
+                        l.getInt("id"),
+                        l.getInt("customerId"),
+                        l.getLong("timestamp"),
+                        l.getString("actorUsername"),
+                        l.getString("type"),
+                        l.getDouble("amount"),
+                        l.getDouble("balanceAfter"),
+                        l.optString("paymentMethod", "SUKI_CREDIT"),
+                        if (!l.isNull("transactionId")) l.getInt("transactionId") else null,
+                        l.optString("notes", "")
                     )
                 )
             }

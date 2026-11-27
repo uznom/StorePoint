@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -81,6 +82,7 @@ internal data class AdminTabDestination(
 internal val ADMIN_TAB_DESTINATIONS: List<AdminTabDestination> = listOf(
     AdminTabDestination("analytics", "Analytics", "Analytics", Icons.Default.Assessment),
     AdminTabDestination("products", "Catalog Inventory", "Catalog", Icons.Default.Inventory),
+    AdminTabDestination("suki", "Suki Credit", "Suki", Icons.Default.MenuBook),
     AdminTabDestination("suppliers", "Suppliers & POs", "Suppliers", Icons.Default.LocalShipping),
     AdminTabDestination("categories", "Categories", "Categories", Icons.Default.Category),
     AdminTabDestination("users", "Staff Accounts", "Staff", Icons.Default.People),

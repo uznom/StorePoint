@@ -66,6 +66,7 @@ class StorePointRepository(private val db: AppDatabase) {
     private val sales = SalesCheckoutRepository(db)
     private val purchasing = PurchasingProductionRepository(db)
     private val shifts = ShiftUserConfigRepository(db)
+    private val offlineExt = OfflineExtensionRepository(db)
 
     // --- Store Config ---
     val storeConfig: Flow<StoreConfig?> = shifts.storeConfig
@@ -103,6 +104,27 @@ class StorePointRepository(private val db: AppDatabase) {
     suspend fun updateStock(productId: Int, newStock: Int) = catalog.updateStock(productId, newStock)
     suspend fun updateStockAndCost(productId: Int, newStock: Int, newCost: Double) =
         catalog.updateStockAndCost(productId, newStock, newCost)
+    suspend fun restockProductAtomic(
+        productId: Int,
+        productName: String,
+        baseUnitsAdded: Int,
+        newUnitCost: Double?,
+        actorUsername: String,
+        reference: String,
+        notes: String,
+        drawerPayout: DrawerTransaction? = null
+    ): Int = catalog.restockProductAtomic(
+        productId = productId,
+        productName = productName,
+        baseUnitsAdded = baseUnitsAdded,
+        newUnitCost = newUnitCost,
+        actorUsername = actorUsername,
+        reference = reference,
+        notes = notes,
+        drawerPayout = drawerPayout
+    )
+    suspend fun updateQuickSellPinned(productId: Int, pinned: Boolean) =
+        catalog.updateQuickSellPinned(productId, pinned)
 
     // --- Cashier Sessions ---
     val activeSession: Flow<CashierSession?> = shifts.activeSession
@@ -139,7 +161,8 @@ class StorePointRepository(private val db: AppDatabase) {
         customerName: String = "",
         gcashNotes: String? = null,
         smartLoadNotes: String? = null,
-        globeLoadNotes: String? = null
+        globeLoadNotes: String? = null,
+        customerId: Int? = null
     ): Transaction = sales.checkout(
         cashierUsername = cashierUsername,
         cartItems = cartItems,
@@ -154,7 +177,8 @@ class StorePointRepository(private val db: AppDatabase) {
         customerName = customerName,
         gcashNotes = gcashNotes,
         smartLoadNotes = smartLoadNotes,
-        globeLoadNotes = globeLoadNotes
+        globeLoadNotes = globeLoadNotes,
+        customerId = customerId
     )
 
     // --- Drawer Transactions ---
@@ -207,6 +231,8 @@ class StorePointRepository(private val db: AppDatabase) {
     suspend fun getParkedItems(parkedId: Int): List<ParkedTransactionItem> = sales.getParkedItems(parkedId)
     suspend fun parkTransaction(note: String, items: List<Pair<Product, Int>>) =
         sales.parkTransaction(note, items)
+    suspend fun parkTransactionWithDetails(note: String, items: List<CartItemDetails>) =
+        sales.parkTransactionWithDetails(note, items)
     suspend fun deleteParkedTransaction(parkedId: Int) = sales.deleteParkedTransaction(parkedId)
 
     // --- Prepopulation ---
@@ -333,4 +359,53 @@ class StorePointRepository(private val db: AppDatabase) {
         productionRun: ProductionLogEntity,
         saveAsBom: Boolean = false
     ): ProductionLogEntity = purchasing.executeProductionRunAtomic(productionRun, saveAsBom)
+
+    // --- Suki Tab (Offline Customer Credit / Utang) ---
+    val allActiveCustomers: Flow<List<CustomerAccount>> = offlineExt.allActiveCustomers
+    val allCustomers: Flow<List<CustomerAccount>> = offlineExt.allCustomers
+    suspend fun getAllCustomersSync(): List<CustomerAccount> = offlineExt.getAllCustomersSync()
+    suspend fun getCustomerByIdSync(id: Int): CustomerAccount? = offlineExt.getCustomerByIdSync(id)
+    fun getLedgerForCustomer(customerId: Int): Flow<List<CustomerCreditEntry>> =
+        offlineExt.getLedgerForCustomer(customerId)
+    suspend fun getLedgerForCustomerSync(customerId: Int): List<CustomerCreditEntry> =
+        offlineExt.getLedgerForCustomerSync(customerId)
+    suspend fun saveCustomerAccount(account: CustomerAccount): Long =
+        offlineExt.saveCustomerAccount(account)
+    suspend fun archiveCustomerAccount(id: Int) = offlineExt.archiveCustomerAccount(id)
+    suspend fun deleteCustomerAccount(id: Int) = offlineExt.deleteCustomerAccount(id)
+    suspend fun recordCustomerPayment(
+        customerId: Int,
+        amount: Double,
+        paymentMethod: String,
+        actorUsername: String,
+        notes: String = ""
+    ): CustomerCreditEntry = offlineExt.recordCustomerPayment(
+        customerId = customerId,
+        amount = amount,
+        paymentMethod = paymentMethod,
+        actorUsername = actorUsername,
+        notes = notes
+    )
+
+    // --- Offline Thermal Print Queue ---
+    val allPendingPrintJobs: Flow<List<PendingPrintJob>> = offlineExt.allPendingPrintJobs
+    suspend fun getAllPendingPrintJobsSync(): List<PendingPrintJob> = offlineExt.getAllPendingPrintJobsSync()
+    suspend fun enqueuePrintJob(
+        jobType: String,
+        label: String,
+        payloadBase64: String,
+        error: String
+    ): Long = offlineExt.enqueuePrintJob(jobType, label, payloadBase64, error)
+    suspend fun markPrintJobRetryFailed(jobId: Int, error: String) =
+        offlineExt.markPrintJobRetryFailed(jobId, error)
+    suspend fun deletePrintJob(jobId: Int) = offlineExt.deletePrintJob(jobId)
+    suspend fun clearAllPrintJobs() = offlineExt.clearAllPrintJobs()
+
+    // --- Mid-Shift Live X-Reading ---
+    suspend fun computeActiveShiftXReading(): ShiftXReadingSummary? =
+        offlineExt.computeActiveShiftXReading()
+
+    // --- Offline CSV Bulk Product Upsert ---
+    suspend fun applyCatalogCsvImport(rows: List<com.munzo.storepoint.util.CatalogCsvRow>): CsvCatalogImportResult =
+        offlineExt.applyCatalogCsvImport(rows)
 }

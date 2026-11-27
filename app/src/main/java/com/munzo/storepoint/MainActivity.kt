@@ -47,40 +47,10 @@ import com.munzo.storepoint.ui.theme.MyApplicationTheme
 class MainActivity : FragmentActivity() {
 
     private val viewModel: StorePointViewModel by viewModels()
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        android.util.Log.d("MainActivity", "Camera permission outcome: $isGranted")
-    }
-
-    private val requestBluetoothPermissionsLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        android.util.Log.d("MainActivity", "Bluetooth permissions outcome: $permissions")
-    }
+    private val hidBarcodeBuffer = com.munzo.storepoint.util.HidBarcodeScannerBuffer()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Setup Window attributes to show over keyguard/lockscreen & turn screen on dynamically for kiosk stability
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
-                setShowWhenLocked(true)
-                setTurnScreenOn(true)
-                val keyguardManager = getSystemService(android.content.Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
-                keyguardManager?.requestDismissKeyguard(this, null)
-            } else {
-                @Suppress("DEPRECATION")
-                window.addFlags(
-                    android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                    android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
-                )
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed setting window keyguard attributes", e)
-        }
 
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -90,51 +60,11 @@ class MainActivity : FragmentActivity() {
                     android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
             }
-            window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "Failed setting layoutInDisplayCutoutMode: ${e.message}")
         }
 
         enableEdgeToEdge()
-
-        // Ask for CAMERA permission the first time the app starts safely
-        try {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.CAMERA
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                requestPermissionLauncher.launch(android.Manifest.permission.CAMERA)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed launching camera permission request", e)
-        }
-
-        // Check BLUETOOTH permissions on Android 12+ (API 31+) for thermal printers like XP-58 Plus
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                val needed = mutableListOf<String>()
-                if (androidx.core.content.ContextCompat.checkSelfPermission(
-                        this,
-                        android.Manifest.permission.BLUETOOTH_CONNECT
-                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-                ) {
-                    needed.add(android.Manifest.permission.BLUETOOTH_CONNECT)
-                }
-                if (androidx.core.content.ContextCompat.checkSelfPermission(
-                        this,
-                        android.Manifest.permission.BLUETOOTH_SCAN
-                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-                ) {
-                    needed.add(android.Manifest.permission.BLUETOOTH_SCAN)
-                }
-                if (needed.isNotEmpty()) {
-                    requestBluetoothPermissionsLauncher.launch(needed.toTypedArray())
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed launching bluetooth permission request", e)
-        }
 
         setContent {
             MyApplicationTheme {
@@ -147,11 +77,6 @@ class MainActivity : FragmentActivity() {
                     val activeUser by viewModel.activeUser.collectAsState()
                     val isKioskActive by viewModel.isKioskModeActive.collectAsState()
                     val isAlwaysOnEnabled by viewModel.isAlwaysOnEnabled.collectAsState()
-                    // SECURITY (issue #4): true when lockdown is NOT genuinely enforced
-                    // (terminal is not provisioned as device owner, or the policy calls
-                    // failed). Drives the REDUCED-mode warning so a cash register is never
-                    // presented as secured when it is only screen-pinned.
-                    var degradedKioskLockdown by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
                     // --- Predictive back gesture ---
                     // Predictive back is enabled app-wide through
@@ -183,8 +108,20 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    // Enforce full-screen immersive mode (hiding navigation bar) when kiosk mode is on
+                    // Enforce full-screen immersive mode & keyguard override only when kiosk mode is on
                     androidx.compose.runtime.LaunchedEffect(isKioskActive) {
+                        try {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+                                setShowWhenLocked(isKioskActive)
+                                setTurnScreenOn(isKioskActive)
+                                if (isKioskActive) {
+                                    val keyguardManager = getSystemService(android.content.Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+                                    keyguardManager?.requestDismissKeyguard(this@MainActivity, null)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("MainActivity", "Failed updating keyguard flags: ${e.message}")
+                        }
                         val windowInsetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                         if (isKioskActive) {
                             windowInsetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -537,6 +474,7 @@ class MainActivity : FragmentActivity() {
                 }
             }
             lockTaskEngaged = false
+            viewModel.isKioskLockdownDegraded.value = false
             return StorePointDeviceAdminReceiver.isDeviceOwner(this)
                 .let { if (it) LockdownStrength.DeviceOwnerEnforced else LockdownStrength.ScreenPinningOnly }
         }
@@ -580,7 +518,9 @@ class MainActivity : FragmentActivity() {
             lockTaskEngaged = false
             degraded = true
         }
-        return if (degraded) LockdownStrength.ScreenPinningOnly else LockdownStrength.DeviceOwnerEnforced
+        val strength = if (degraded) LockdownStrength.ScreenPinningOnly else LockdownStrength.DeviceOwnerEnforced
+        viewModel.isKioskLockdownDegraded.value = (strength == LockdownStrength.ScreenPinningOnly)
+        return strength
     }
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
@@ -588,6 +528,24 @@ class MainActivity : FragmentActivity() {
             if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK && (event.isLongPress || event.repeatCount > 0)) {
                 // Completely block long-press back trigger
                 return true
+            }
+        }
+        // Global USB/Bluetooth HID hardware barcode scanner capture.
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && !viewModel.hidScannerSuppressed.value) {
+            val isTerminator = event.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                event.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ||
+                event.keyCode == android.view.KeyEvent.KEYCODE_TAB
+            if (isTerminator) {
+                val scanned = hidBarcodeBuffer.onTerminator(event.eventTime)
+                if (scanned != null) {
+                    viewModel.emitHidBarcodeScan(scanned)
+                    return true
+                }
+            } else if (!event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed) {
+                val unicode = event.unicodeChar
+                if (unicode > 0) {
+                    hidBarcodeBuffer.onPrintableChar(unicode.toChar(), event.eventTime)
+                }
             }
         }
         return super.dispatchKeyEvent(event)

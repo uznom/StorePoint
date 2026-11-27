@@ -15,8 +15,22 @@ internal fun StorePointViewModel.cartEffectiveUnits(productId: Int, quantity: In
 }
 
 internal fun StorePointViewModel.cartSelectUomImpl(productId: Int, uom: UomOption) {
+    val safeMult = uom.multiplier.coerceAtLeast(1)
+    val existing = _cartMap.value[productId]
+    if (existing != null) {
+        val (product, qty) = existing
+        val requiredUnits = qty * safeMult
+        if (product.trackInventory && requiredUnits > product.stockCount) {
+            Toast.makeText(
+                context,
+                "Cannot switch to ${uom.name}: requires $requiredUnits base units but only ${product.stockCount} in stock.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+    }
     val currentMap = _selectedCartUoms.value.toMutableMap()
-    currentMap[productId] = uom
+    currentMap[productId] = uom.copy(multiplier = safeMult)
     _selectedCartUoms.value = currentMap
 }
 
@@ -148,13 +162,30 @@ internal fun StorePointViewModel.cartHandleBarcodeScanImpl(barcode: String, quan
         }
 
         if (product != null) {
-            cartAddToCartImpl(product, quantity)
+            val safeQty = quantity.coerceAtLeast(1)
+            val prevQty = _cartMap.value[product.id]?.second ?: 0
             if (matchedUom != null) {
-                cartSelectUomImpl(product.id, matchedUom)
+                val safeMult = matchedUom.multiplier.coerceAtLeast(1)
+                val requiredUnits = (prevQty + safeQty) * safeMult
+                if (product.trackInventory && requiredUnits > product.stockCount) {
+                    Toast.makeText(
+                        context,
+                        "Cannot add $safeQty x ${matchedUom.name}: requires $requiredUnits base units but only ${product.stockCount} in stock.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
+                val uomMap = _selectedCartUoms.value.toMutableMap()
+                uomMap[product.id] = matchedUom.copy(multiplier = safeMult)
+                _selectedCartUoms.value = uomMap
             }
-            playBeep()
-            val tagStr = if (matchedUom != null) " (${matchedUom.name})" else ""
-            Toast.makeText(context, "Added: $quantity x ${product.name}$tagStr", Toast.LENGTH_SHORT).show()
+            cartAddToCartImpl(product, safeQty)
+            val newQty = _cartMap.value[product.id]?.second ?: 0
+            if (newQty > prevQty) {
+                playBeep()
+                val tagStr = if (matchedUom != null) " (${matchedUom.name})" else ""
+                Toast.makeText(context, "Added: $safeQty x ${product.name}$tagStr", Toast.LENGTH_SHORT).show()
+            }
         } else {
             Toast.makeText(context, "No product matches scan query '$barcode'.", Toast.LENGTH_LONG).show()
         }
@@ -167,7 +198,21 @@ internal fun StorePointViewModel.cartParkActiveTransactionImpl(note: String) {
         return
     }
     viewModelScope.launch {
-        repository.parkTransaction(note, _cartMap.value.values.toList())
+        val uomsSnapshot = _selectedCartUoms.value
+        val discountsSnapshot = _cartItemDiscounts.value
+        val detailedItems = _cartMap.value.values.map { (product, qty) ->
+            val uom = uomsSnapshot[product.id] ?: UomOption("Base Unit", 1, product.price)
+            val discount = discountsSnapshot[product.id] ?: 0.0
+            CartItemDetails(
+                product = product,
+                quantity = qty,
+                uomName = uom.name,
+                multiplier = uom.multiplier,
+                selectedPrice = uom.price,
+                discountPerUnit = discount
+            )
+        }
+        repository.parkTransactionWithDetails(note, detailedItems)
         cartClearCartImpl()
         Toast.makeText(context, "Transaction successfully parked ($note)", Toast.LENGTH_SHORT).show()
     }
@@ -177,25 +222,35 @@ internal fun StorePointViewModel.cartResumeParkedTransactionImpl(parkedId: Int, 
     viewModelScope.launch {
         val items = repository.getParkedItems(parkedId)
         val resumedCartItems = mutableListOf<Pair<Product, Int>>()
+        val restoredUoms = mutableMapOf<Int, UomOption>()
+        val restoredDiscounts = mutableMapOf<Int, Double>()
 
         for (item in items) {
             val dbProd = allProducts.value.find { it.id == item.productId }
-            if (dbProd != null) {
-                resumedCartItems.add(Pair(dbProd, item.quantity))
-            } else {
-                val stubProduct = Product(
-                    id = item.productId,
-                    name = item.productName,
-                    categoryId = 0,
-                    price = item.price,
-                    stockCount = item.quantity,
-                    barcode = ""
+            val resolvedProduct = dbProd ?: Product(
+                id = item.productId,
+                name = item.productName,
+                categoryId = 0,
+                price = item.price,
+                stockCount = item.quantity,
+                barcode = ""
+            )
+            resumedCartItems.add(Pair(resolvedProduct, item.quantity))
+            if (item.uomMultiplier > 1 || !item.uomName.equals("Base Unit", ignoreCase = true)) {
+                restoredUoms[resolvedProduct.id] = UomOption(
+                    name = item.uomName,
+                    multiplier = item.uomMultiplier.coerceAtLeast(1),
+                    price = item.price
                 )
-                resumedCartItems.add(Pair(stubProduct, item.quantity))
+            }
+            if (item.discountAmount > 0.0) {
+                restoredDiscounts[resolvedProduct.id] = item.discountAmount
             }
         }
 
         _cartMap.value = resumedCartItems.associateBy { it.first.id }.toMutableMap()
+        _selectedCartUoms.value = restoredUoms
+        _cartItemDiscounts.value = restoredDiscounts
         repository.deleteParkedTransaction(parkedId)
         onComplete()
         Toast.makeText(context, "Parked transaction resumed successfully.", Toast.LENGTH_SHORT).show()
@@ -217,6 +272,7 @@ internal fun StorePointViewModel.cartExecuteCheckoutImpl(
     totalAmount: Double,
     checkoutItems: List<Pair<Product, Int>>? = null,
     customerName: String = "",
+    customerId: Int? = null,
     onError: (String) -> Unit = {},
     onSuccess: (Transaction) -> Unit
 ) {
@@ -235,12 +291,14 @@ internal fun StorePointViewModel.cartExecuteCheckoutImpl(
             val prod = item.first
             val qty = item.second
             val uom = _selectedCartUoms.value[prod.id] ?: UomOption("Base Unit", 1, prod.price)
+            val discount = _cartItemDiscounts.value[prod.id] ?: 0.0
             CartItemDetails(
                 product = prod,
                 quantity = qty,
                 uomName = uom.name,
                 multiplier = uom.multiplier,
-                selectedPrice = uom.price
+                selectedPrice = uom.price,
+                discountPerUnit = discount
             )
         }
 
@@ -302,12 +360,15 @@ internal fun StorePointViewModel.cartExecuteCheckoutImpl(
                 gcashDelta = normGcashDelta,
                 smartLoadDelta = normSmartLoadDelta,
                 globeLoadDelta = normGlobeLoadDelta,
-                customerName = customerName.trim()
+                customerName = customerName.trim(),
+                customerId = customerId
             )
 
             if (checkoutItems != null) {
                 val checkedOutIds = checkoutItems.map { it.first.id }.toSet()
                 _cartMap.value = _cartMap.value.filterKeys { it !in checkedOutIds }.toMutableMap()
+                _selectedCartUoms.value = _selectedCartUoms.value.filterKeys { it !in checkedOutIds }
+                _cartItemDiscounts.value = _cartItemDiscounts.value.filterKeys { it !in checkedOutIds }
             } else {
                 cartClearCartImpl()
             }

@@ -86,13 +86,20 @@ internal object PdfReportRenderer {
             canvas.drawText("1. EXECUTIVE FINANCIAL PERFORMANCE", 40f, y, p.heading)
             y += 20f
 
-            val totalTransactionsCount = transactions.size
-            val totalRevenue = transactions.sumOf { it.totalAmount }
-            val taxCollected = transactions.sumOf { it.taxAmount }
-            val cashRevenue = transactions.filter { it.paymentMethod == "CASH" }.sumOf { it.totalAmount }
-            val gcashRevenue = transactions.filter { it.paymentMethod.contains("GCASH", ignoreCase = true) }.sumOf { it.totalAmount }
-            val mayaRevenue = transactions.filter { it.paymentMethod.contains("MAYA", ignoreCase = true) }.sumOf { it.totalAmount }
-            val avgBasket = if (totalTransactionsCount > 0) totalRevenue / totalTransactionsCount else 0.0
+            val activeTransactions = transactions.filter {
+                it.status != "VOIDED" && it.status != "CANCELLED" && it.status != "REFUNDED"
+            }
+            val totalTransactionsCount = activeTransactions.size
+            val totalRevenue = StorePointRepository.roundMoney(activeTransactions.sumOf { it.totalAmount })
+            val taxCollected = StorePointRepository.roundMoney(activeTransactions.sumOf { it.taxAmount })
+            val cashRevenue = StorePointRepository.roundMoney(activeTransactions.filter { it.paymentMethod == "CASH" }.sumOf { it.totalAmount })
+            val gcashRevenue = StorePointRepository.roundMoney(activeTransactions.filter { it.paymentMethod.contains("GCASH", ignoreCase = true) }.sumOf { it.totalAmount })
+            val mayaRevenue = StorePointRepository.roundMoney(
+                activeTransactions.filter {
+                    it.paymentMethod.contains("MAYA", ignoreCase = true) || it.paymentMethod.contains("CARD", ignoreCase = true)
+                }.sumOf { it.totalAmount }
+            )
+            val avgBasket = if (totalTransactionsCount > 0) StorePointRepository.roundMoney(totalRevenue / totalTransactionsCount) else 0.0
 
             canvas.drawText("Total Transactions Processed:", 50f, y, p.text)
             canvas.drawText("$totalTransactionsCount transactions", 260f, y, p.bold)
@@ -127,7 +134,7 @@ internal object PdfReportRenderer {
 
             val totalProductsInStore = productInventory.size
             val totalStocksOnHand = productInventory.sumOf { it.stockCount }
-            val outOfStockItems = productInventory.filter { it.stockCount == 0 }
+            val outOfStockItems = productInventory.filter { it.stockCount <= 0 }
             val lowStockItems = productInventory.filter { it.stockCount in 1..5 }
 
             canvas.drawText("Total registered Products catalog:", 50f, y, p.text)

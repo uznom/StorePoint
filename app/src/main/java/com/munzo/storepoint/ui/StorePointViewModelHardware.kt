@@ -182,32 +182,15 @@ internal fun StorePointViewModel.hardwarePrintReceiptImpl(
             printBarcode = printReceiptBarcode.value
         )
 
-        when (type) {
-            EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
-                val res = EscPosHelper.printOverNetwork(printerIpAddress.value, printerPort.value, receiptBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Receipt printed over Network ESC/POS.") },
-                    onFailure = { onCompleted(false, "Network printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name -> {
-                val res = EscPosHelper.printOverBluetooth(printerBtMac.value, receiptBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Receipt printed over Bluetooth ESC/POS.") },
-                    onFailure = { onCompleted(false, "Bluetooth printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
-                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, receiptBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Receipt printed over USB OTG ESC/POS.") },
-                    onFailure = { onCompleted(false, "USB printer error: ${it.localizedMessage}") }
-                )
-            }
-            else -> {
-                onCompleted(false, "Printer type set to System Spooler. Use standard Print Dialog.")
-            }
-        }
+        val label = "Receipt #TX-${transaction.id}"
+        lastPrintedReceipt.value = LastPrintedReceiptPayload(label, receiptBytes)
+        offlineDispatchEscPosOrQueueImpl(
+            jobType = "RECEIPT",
+            label = label,
+            bytes = receiptBytes,
+            enqueueOnFailure = true,
+            onCompleted = onCompleted
+        )
     }
 }
 
@@ -239,32 +222,13 @@ internal fun StorePointViewModel.hardwarePrintRefundReceiptImpl(
             printBarcode = printReceiptBarcode.value
         )
 
-        when (type) {
-            EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
-                val res = EscPosHelper.printOverNetwork(printerIpAddress.value, printerPort.value, receiptBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Refund receipt printed over Network ESC/POS.") },
-                    onFailure = { onCompleted(false, "Network printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name -> {
-                val res = EscPosHelper.printOverBluetooth(printerBtMac.value, receiptBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Refund receipt printed over Bluetooth ESC/POS.") },
-                    onFailure = { onCompleted(false, "Bluetooth printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
-                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, receiptBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Refund receipt printed over USB OTG ESC/POS.") },
-                    onFailure = { onCompleted(false, "USB printer error: ${it.localizedMessage}") }
-                )
-            }
-            else -> {
-                onCompleted(false, "Thermal printer not connected. Connect Bluetooth, USB or Network printer.")
-            }
-        }
+        offlineDispatchEscPosOrQueueImpl(
+            jobType = "REFUND",
+            label = "Refund #RET-${returnTransaction.id}",
+            bytes = receiptBytes,
+            enqueueOnFailure = true,
+            onCompleted = onCompleted
+        )
     }
 }
 
@@ -295,32 +259,13 @@ internal fun StorePointViewModel.hardwarePrintDrawerSlipImpl(
             printBarcode = printReceiptBarcode.value
         )
 
-        when (type) {
-            EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
-                val res = EscPosHelper.printOverNetwork(printerIpAddress.value, printerPort.value, slipBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Drawer slip printed over Network ESC/POS.") },
-                    onFailure = { onCompleted(false, "Network printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name -> {
-                val res = EscPosHelper.printOverBluetooth(printerBtMac.value, slipBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Drawer slip printed over Bluetooth ESC/POS.") },
-                    onFailure = { onCompleted(false, "Bluetooth printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
-                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, slipBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Drawer slip printed over USB OTG ESC/POS.") },
-                    onFailure = { onCompleted(false, "USB printer error: ${it.localizedMessage}") }
-                )
-            }
-            else -> {
-                onCompleted(false, "Thermal printer not connected. Connect Bluetooth, USB or Network printer.")
-            }
-        }
+        offlineDispatchEscPosOrQueueImpl(
+            jobType = "DRAWER_SLIP",
+            label = "Drawer Slip #DRW-${drawerTransaction.id}",
+            bytes = slipBytes,
+            enqueueOnFailure = true,
+            onCompleted = onCompleted
+        )
     }
 }
 
@@ -393,32 +338,11 @@ internal fun StorePointViewModel.hardwarePrintZReadingImpl(
     zTicketBytes: ByteArray,
     onCompleted: (Boolean, String) -> Unit
 ) {
-    viewModelScope.launch {
-        when (printerType.value) {
-            EscPosHelper.PrinterType.NETWORK_ESCPOS.name -> {
-                val res = EscPosHelper.printOverNetwork(printerIpAddress.value, printerPort.value, zTicketBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Z-Reading printed to network printer.") },
-                    onFailure = { onCompleted(false, "Network printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.BLUETOOTH_ESCPOS.name -> {
-                val res = EscPosHelper.printOverBluetooth(printerBtMac.value, zTicketBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Z-Reading printed to Bluetooth printer.") },
-                    onFailure = { onCompleted(false, "Bluetooth printer error: ${it.localizedMessage}") }
-                )
-            }
-            EscPosHelper.PrinterType.USB_ESCPOS.name -> {
-                val res = UsbPrinterHelper.printOverUsb(context, printerUsbIdentifier.value, zTicketBytes)
-                res.fold(
-                    onSuccess = { onCompleted(true, "Z-Reading printed to USB printer.") },
-                    onFailure = { onCompleted(false, "USB printer error: ${it.localizedMessage}") }
-                )
-            }
-            else -> {
-                onCompleted(false, "Thermal printer not connected. Connect Bluetooth, USB or Network printer.")
-            }
-        }
-    }
+    offlineDispatchEscPosOrQueueImpl(
+        jobType = "Z_READING",
+        label = "Shift Z-Reading",
+        bytes = zTicketBytes,
+        enqueueOnFailure = true,
+        onCompleted = onCompleted
+    )
 }

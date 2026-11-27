@@ -44,12 +44,22 @@ object PdfExportUtil {
     // CSV EXPORT ENGINE
     // =========================================================================
 
+    internal fun sanitizeCsvText(raw: String): String {
+        val trimmedStart = raw.trimStart()
+        val guarded = if (trimmedStart.isNotEmpty() && trimmedStart[0] in charArrayOf('=', '+', '-', '@', '\t', '\r')) {
+            "'$raw"
+        } else {
+            raw
+        }
+        return guarded.replace("\"", "\"\"")
+    }
+
     fun buildSalesSummaryCsv(transactions: List<Transaction>): String {
         val sb = StringBuilder()
         sb.append("Transaction ID,Timestamp,Date Time,Cashier,Customer,Payment Method,Subtotal,Tax Amount,Total Amount,Status\n")
         transactions.forEach { t ->
             val dateStr = formatDate(Date(t.timestamp))
-            sb.append("#${t.id},${t.timestamp},\"$dateStr\",${t.cashierUsername},\"${t.customerName.replace("\"", "\"\"")}\",${t.paymentMethod},${String.format(Locale.US, "%.2f", t.subtotal)},${String.format(Locale.US, "%.2f", t.taxAmount)},${String.format(Locale.US, "%.2f", t.totalAmount)},${t.status}\n")
+            sb.append("#${t.id},${t.timestamp},\"$dateStr\",${sanitizeCsvText(t.cashierUsername)},\"${sanitizeCsvText(t.customerName)}\",${t.paymentMethod},${String.format(Locale.US, "%.2f", t.subtotal)},${String.format(Locale.US, "%.2f", t.taxAmount)},${String.format(Locale.US, "%.2f", t.totalAmount)},${t.status}\n")
         }
         return sb.toString()
     }
@@ -72,7 +82,7 @@ object PdfExportUtil {
             val startStr = formatDate(Date(s.startTime))
             val endStr = if (s.endTime != null) formatDate(Date(s.endTime)) else "ACTIVE"
             val endCashStr = if (s.endingCash != null) String.format(Locale.US, "%.2f", s.endingCash) else "N/A"
-            sb.append("#${s.id},${s.cashierUsername},\"$startStr\",\"$endStr\",${String.format(Locale.US, "%.2f", s.startingCash)},$endCashStr,${s.status}\n")
+            sb.append("#${s.id},${sanitizeCsvText(s.cashierUsername)},\"$startStr\",\"$endStr\",${String.format(Locale.US, "%.2f", s.startingCash)},$endCashStr,${s.status}\n")
         }
         return sb.toString()
     }
@@ -95,7 +105,7 @@ object PdfExportUtil {
             val totalCost = StorePointRepository.roundMoney(p.cost * p.stockCount)
             val totalRetail = StorePointRepository.roundMoney(p.price * p.stockCount)
             val potentialProfit = StorePointRepository.roundMoney((p.price - p.cost) * p.stockCount)
-            sb.append("#${p.id},\"${p.barcode}\",\"${p.name.replace("\"", "\"\"")}\",${p.stockCount},\"${p.baseUom}\",${String.format(Locale.US, "%.2f", p.cost)},${String.format(Locale.US, "%.2f", p.price)},${String.format(Locale.US, "%.2f", totalCost)},${String.format(Locale.US, "%.2f", totalRetail)},${String.format(Locale.US, "%.2f", potentialProfit)},${p.trackInventory}\n")
+            sb.append("#${p.id},\"${sanitizeCsvText(p.barcode)}\",\"${sanitizeCsvText(p.name)}\",${p.stockCount},\"${sanitizeCsvText(p.baseUom)}\",${String.format(Locale.US, "%.2f", p.cost)},${String.format(Locale.US, "%.2f", p.price)},${String.format(Locale.US, "%.2f", totalCost)},${String.format(Locale.US, "%.2f", totalRetail)},${String.format(Locale.US, "%.2f", potentialProfit)},${p.trackInventory}\n")
         }
         return sb.toString()
     }

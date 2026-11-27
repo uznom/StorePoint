@@ -3,7 +3,6 @@ package com.munzo.storepoint.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.munzo.storepoint.data.AppDatabase
@@ -61,21 +60,11 @@ object DatabaseBackupManager {
         fileDateFormat.format(date)
     }
 
-    private fun base64Encode(bytes: ByteArray): String {
-        return try {
-            Base64.encodeToString(bytes, Base64.NO_WRAP)
-        } catch (_: Throwable) {
-            java.util.Base64.getEncoder().encodeToString(bytes)
-        }
-    }
+    private fun base64Encode(bytes: ByteArray): String =
+        BackupIntegrityCodec.encodeBase64(bytes)
 
-    private fun base64Decode(str: String): ByteArray {
-        return try {
-            Base64.decode(str, Base64.DEFAULT)
-        } catch (_: Throwable) {
-            java.util.Base64.getDecoder().decode(str.trim())
-        }
-    }
+    private fun base64Decode(str: String): ByteArray =
+        BackupIntegrityCodec.decodeBase64(str)
 
     private fun deriveBackupKeys(passphrase: String, salt: ByteArray): Pair<ByteArray, ByteArray> {
         val spec = PBEKeySpec(passphrase.toCharArray(), salt, BACKUP_PBKDF2_ITERATIONS, 512)

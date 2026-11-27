@@ -30,9 +30,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ShiftReconciliation::class,
         BillOfMaterials::class,
         ProductionLogEntity::class,
-        InventoryMovementEntity::class
+        InventoryMovementEntity::class,
+        CustomerAccount::class,
+        CustomerCreditEntry::class,
+        PendingPrintJob::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -53,6 +56,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val shiftReconciliationDao: ShiftReconciliationDao
     abstract val productionDao: ProductionDao
     abstract val inventoryMovementDao: InventoryMovementDao
+    abstract val customerCreditDao: CustomerCreditDao
+    abstract val pendingPrintJobDao: PendingPrintJobDao
 
     companion object {
         @Volatile
@@ -77,6 +82,7 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_16_17 get() = DatabaseMigrations.MIGRATION_16_17
         val MIGRATION_17_18 get() = DatabaseMigrations.MIGRATION_17_18
         val MIGRATION_18_19 get() = DatabaseMigrations.MIGRATION_18_19
+        val MIGRATION_19_20 get() = DatabaseMigrationsV20.MIGRATION_19_20
 
         fun configureConnectionPragmas(db: SupportSQLiteDatabase, isMigrating: Boolean = false) {
             // CRITICAL: Do NOT enable foreign key enforcement while a schema migration is in progress.

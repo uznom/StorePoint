@@ -59,7 +59,7 @@ fun AdminStaffSecuritySection(viewModel: StorePointViewModel) {
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = "Reset administrator PIN with current PIN or Master Recovery Key.",
+                            text = "Change administrator PIN by verifying your current PIN.",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
@@ -71,9 +71,11 @@ fun AdminStaffSecuritySection(viewModel: StorePointViewModel) {
 
                 HeroInput(
                     value = adminResetCurrentPin,
-                    onValueChange = { adminResetCurrentPin = it; adminResetError = null },
-                    label = { Text("Current PIN or Master Recovery Key") },
-                    placeholder = { Text("Current PIN or STOREPOINT-ADMIN-RESET") },
+                    onValueChange = { adminResetCurrentPin = it.take(6); adminResetError = null },
+                    label = { Text("Current Admin PIN") },
+                    placeholder = { Text("Enter current PIN") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth().testTag("reset_admin_current_pin_input"),
                     singleLine = true
                 )

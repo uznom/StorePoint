@@ -371,93 +371,76 @@ internal fun StorePointViewModel.inventoryRestockProductWithUomImpl(
             onPayoutError("Quantity and multiplier must be greater than zero.")
             return@launch
         }
+        if (totalCost != null && (totalCost.isNaN() || totalCost.isInfinite() || totalCost < 0.0)) {
+            onPayoutError("Total restock cost must be a valid non-negative amount.")
+            return@launch
+        }
+
         val baseUnitsAdded = quantity * multiplier
-        val newStock = product.stockCount + baseUnitsAdded
         val currSymbol = storeConfig.value?.currencySymbol ?: "$"
-        
-        if (payFromDrawer && totalCost != null && totalCost > 0.0) {
+        val normTotalCost = totalCost?.let { StorePointRepository.roundMoney(it) }
+        val newUnitCost = if (normTotalCost != null && normTotalCost > 0.0) {
+            StorePointRepository.roundMoney(normTotalCost / baseUnitsAdded)
+        } else {
+            null
+        }
+        val costStr = newUnitCost?.let {
+            "$currSymbol${String.format(java.util.Locale.getDefault(), "%.2f", it)}"
+        }
+
+        var drawerPayout: DrawerTransaction? = null
+        val actor: String
+        val notes: String
+
+        if (payFromDrawer && normTotalCost != null && normTotalCost > 0.0) {
             val session = activeSession.value
             if (session == null) {
                 onPayoutError("No active cashier shift session found to payout from.")
                 return@launch
             }
             val currentCash = getCurrentDrawerCash()
-            if (currentCash < totalCost) {
-                onPayoutError("Insufficient cash in drawer to pay supplier (Drawer: $currSymbol${String.format("%.2f", currentCash)}, Required: $currSymbol${String.format("%.2f", totalCost)}).")
+            if (currentCash < normTotalCost) {
+                onPayoutError("Insufficient cash in drawer to pay supplier (Drawer: $currSymbol${String.format("%.2f", currentCash)}, Required: $currSymbol${String.format("%.2f", normTotalCost)}).")
                 return@launch
             }
-            
-            // Pre-check passed, proceed with Supplier Payout.
-            val cashier = activeUser.value?.username ?: session.cashierUsername
-            val tx = DrawerTransaction(
+            actor = activeUser.value?.username ?: session.cashierUsername
+            drawerPayout = DrawerTransaction(
                 sessionId = session.id,
                 timestamp = System.currentTimeMillis(),
-                cashierUsername = cashier,
-                amount = -totalCost,
+                cashierUsername = actor,
+                amount = -normTotalCost,
                 type = "PAYOUT",
                 reason = "Restock - ${product.name} (${quantity}x, Mult: ${multiplier}x)"
             )
-            repository.logDrawerTransaction(tx)
-            
-            val newUnitCost = StorePointRepository.roundMoney(totalCost / baseUnitsAdded)
-            repository.updateStockAndCost(product.id, newStock, newUnitCost)
-            val costStr = "$currSymbol${String.format(java.util.Locale.getDefault(), "%.2f", newUnitCost)}"
-
-            repository.logInventoryMovement(
-                InventoryMovementEntity(
-                    productId = product.id,
-                    productName = product.name,
-                    timestamp = System.currentTimeMillis(),
-                    actorUsername = cashier,
-                    movementType = "RESTOCK",
-                    quantityDelta = baseUnitsAdded.toDouble(),
-                    stockBefore = product.stockCount,
-                    stockAfter = newStock,
-                    reference = "RESTOCK-${System.currentTimeMillis() % 100000}",
-                    notes = "Supplier restock payout: ${quantity}x (mult: ${multiplier}x). New COGS: $costStr"
-                )
-            )
-            Toast.makeText(context, "Supplier paid from drawer! Received $baseUnitsAdded base units of ${product.name}! Updated unit cost to $costStr", Toast.LENGTH_LONG).show()
+            notes = "Supplier restock payout: ${quantity}x (mult: ${multiplier}x). New COGS: $costStr"
         } else {
-            val actor = activeUser.value?.username ?: "staff"
-            if (totalCost != null && totalCost > 0.0) {
-                val newUnitCost = StorePointRepository.roundMoney(totalCost / baseUnitsAdded)
-                repository.updateStockAndCost(product.id, newStock, newUnitCost)
-                val costStr = "$currSymbol${String.format(java.util.Locale.getDefault(), "%.2f", newUnitCost)}"
-
-                repository.logInventoryMovement(
-                    InventoryMovementEntity(
-                        productId = product.id,
-                        productName = product.name,
-                        timestamp = System.currentTimeMillis(),
-                        actorUsername = actor,
-                        movementType = "RESTOCK",
-                        quantityDelta = baseUnitsAdded.toDouble(),
-                        stockBefore = product.stockCount,
-                        stockAfter = newStock,
-                        reference = "RESTOCK-${System.currentTimeMillis() % 100000}",
-                        notes = "Restocked ${quantity}x (mult: ${multiplier}x). New COGS: $costStr"
-                    )
-                )
-                Toast.makeText(context, "Received $baseUnitsAdded base units of ${product.name}! Updated unit cost to $costStr", Toast.LENGTH_LONG).show()
+            actor = activeUser.value?.username ?: "staff"
+            notes = if (costStr != null) {
+                "Restocked ${quantity}x (mult: ${multiplier}x). New COGS: $costStr"
             } else {
-                repository.updateStock(product.id, newStock)
-                repository.logInventoryMovement(
-                    InventoryMovementEntity(
-                        productId = product.id,
-                        productName = product.name,
-                        timestamp = System.currentTimeMillis(),
-                        actorUsername = actor,
-                        movementType = "RESTOCK",
-                        quantityDelta = baseUnitsAdded.toDouble(),
-                        stockBefore = product.stockCount,
-                        stockAfter = newStock,
-                        reference = "RESTOCK-${System.currentTimeMillis() % 100000}",
-                        notes = "Restocked ${quantity}x (mult: ${multiplier}x)"
-                    )
-                )
-                Toast.makeText(context, "Received $baseUnitsAdded base units of ${product.name}!", Toast.LENGTH_LONG).show()
+                "Restocked ${quantity}x (mult: ${multiplier}x)"
             }
+        }
+
+        try {
+            repository.restockProductAtomic(
+                productId = product.id,
+                productName = product.name,
+                baseUnitsAdded = baseUnitsAdded,
+                newUnitCost = newUnitCost,
+                actorUsername = actor,
+                reference = "RESTOCK-${System.currentTimeMillis() % 100000}",
+                notes = notes,
+                drawerPayout = drawerPayout
+            )
+            val toastMsg = when {
+                drawerPayout != null -> "Supplier paid from drawer! Received $baseUnitsAdded base units of ${product.name}! Updated unit cost to $costStr"
+                costStr != null -> "Received $baseUnitsAdded base units of ${product.name}! Updated unit cost to $costStr"
+                else -> "Received $baseUnitsAdded base units of ${product.name}!"
+            }
+            Toast.makeText(context, toastMsg, Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            onPayoutError(e.localizedMessage ?: "Restock failed.")
         }
     }
 }

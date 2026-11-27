@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +69,7 @@ fun ProductsTab(
     val auditedItems = remember { mutableStateMapOf<Int, Int>() }
     var searchQuery by remember { mutableStateOf("") }
     var stockFilter by remember { mutableStateOf(CatalogStockFilter.All) }
+    var showCsvToolsDialog by remember { mutableStateOf(false) }
 
     val lowStockCount = remember(products) { products.count { it.stockCount in 1..5 } }
     val outOfStockCount = remember(products) { products.count { it.stockCount <= 0 } }
@@ -117,6 +119,15 @@ fun ProductsTab(
                         )
 
                         if (!isStockCheckMode) {
+                            FilledTonalIconButton(
+                                onClick = { showCsvToolsDialog = true },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(HeroUITheme.radius.md)
+                                    .testTag("admin_catalog_csv_btn_compact")
+                            ) {
+                                Icon(Icons.Default.UploadFile, contentDescription = "CSV Import / Export")
+                            }
                             FilledTonalIconButton(
                                 onClick = { viewModel.shareInventoryViaQuickShare(context) },
                                 modifier = Modifier
@@ -169,6 +180,14 @@ fun ProductsTab(
                         )
 
                         if (!isStockCheckMode) {
+                            HeroFilledTonalButton(
+                                onClick = { showCsvToolsDialog = true },
+                                modifier = Modifier.testTag("admin_catalog_csv_btn_wide")
+                            ) {
+                                Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("CSV", style = MaterialTheme.typography.labelMedium)
+                            }
                             HeroFilledTonalButton(
                                 onClick = { viewModel.shareInventoryViaQuickShare(context) },
                                 modifier = Modifier.testTag("admin_catalog_quick_share_btn_wide")
@@ -263,11 +282,21 @@ fun ProductsTab(
                 onDelete = onDelete,
                 onRestockClick = onRestockClick,
                 onVariantsClick = onVariantsClick,
+                onToggleQuickSellPin = { prod ->
+                    viewModel.setProductQuickSellPinned(prod.id, !prod.isQuickSellPinned)
+                },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
             )
         }
+    }
+
+    if (showCsvToolsDialog) {
+        AdminCsvImportDialog(
+            viewModel = viewModel,
+            onDismiss = { showCsvToolsDialog = false }
+        )
     }
 }
 

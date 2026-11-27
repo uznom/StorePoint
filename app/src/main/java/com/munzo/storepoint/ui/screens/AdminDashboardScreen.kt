@@ -147,6 +147,7 @@ fun AdminDashboardScreen(
                         onVariantsClick = { productForVariants = it },
                         viewModel = viewModel
                     )
+                    "suki" -> AdminSukiCreditTab(viewModel = viewModel, curr = curr)
                     "suppliers" -> SuppliersAndPurchasesTab(viewModel = viewModel)
                     "categories" -> CategoriesTab(
                         categories = categories,

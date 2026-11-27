@@ -50,20 +50,29 @@ fun AnalyticsTab(
     viewModel: StorePointViewModel? = null
 ) {
     val context = LocalContext.current
-    val totalRevenue = transactions.sumOf { it.totalAmount }
-    val totalProfit = transactionItems.sumOf { (it.price - it.cost) * it.quantity }
-    val avgTransaction = if (transactions.isNotEmpty()) totalRevenue / transactions.size else 0.0
+    val activeSales = remember(transactions) {
+        transactions.filter {
+            it.status != "VOIDED" && it.status != "CANCELLED" && it.status != "REFUNDED"
+        }
+    }
+    val activeSaleIds = remember(activeSales) { activeSales.map { it.id }.toSet() }
+    val activeSaleItems = remember(transactionItems, activeSaleIds) {
+        transactionItems.filter { it.transactionId in activeSaleIds }
+    }
+    val totalRevenue = StorePointRepository.roundMoney(activeSales.sumOf { it.totalAmount })
+    val totalProfit = StorePointRepository.roundMoney(activeSaleItems.sumOf { (it.price - it.cost) * it.quantity })
+    val avgTransaction = if (activeSales.isNotEmpty()) StorePointRepository.roundMoney(totalRevenue / activeSales.size) else 0.0
     val lowStockItems = products.filter { it.stockCount in 1..5 }
     val outOfStockItems = products.filter { it.stockCount <= 0 }
 
     // Top-performing products calculation
-    val topProducts = remember(transactionItems) {
-        transactionItems
+    val topProducts = remember(activeSaleItems) {
+        activeSaleItems
             .groupBy { it.productName }
             .map { (name, items) ->
                 val totalQty = items.sumOf { it.quantity }
-                val totalSales = items.sumOf { it.price * it.quantity }
-                val totalProfit = items.sumOf { (it.price - it.cost) * it.quantity }
+                val totalSales = StorePointRepository.roundMoney(items.sumOf { it.price * it.quantity })
+                val totalProfit = StorePointRepository.roundMoney(items.sumOf { (it.price - it.cost) * it.quantity })
                 Triple(name, totalQty, Pair(totalSales, totalProfit))
             }
             .sortedByDescending { it.third.first } // Ranked by sales revenue
@@ -123,7 +132,7 @@ fun AnalyticsTab(
 
         // Sales Revenue Trend Plot
         Text("Sales Revenue Trend Visualization", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        InteractiveSalesTrendChart(transactions, curr)
+        InteractiveSalesTrendChart(activeSales, curr)
 
         // Top-Performing Product Rankings
         HeroCard(

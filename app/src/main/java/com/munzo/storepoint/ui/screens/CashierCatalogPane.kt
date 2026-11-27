@@ -249,6 +249,14 @@ internal fun CashierCatalogPane(
             }
 
             val effectiveQuery = debouncedSearchQuery.trim()
+            if (effectiveQuery.isBlank()) {
+                CashierQuickSellRibbon(
+                    products = products,
+                    curr = curr,
+                    viewModel = viewModel,
+                    onSelectProductForVariantPicker = onSelectProductForVariantPicker
+                )
+            }
             val filteredProducts = remember(products, categoryNameById, selectedCategory, effectiveQuery) {
                 products.filter { p ->
                     val categoryName = categoryNameById[p.categoryId] ?: ""

@@ -54,8 +54,26 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
         customerName: String = "",
         gcashNotes: String? = null,
         smartLoadNotes: String? = null,
-        globeLoadNotes: String? = null
+        globeLoadNotes: String? = null,
+        customerId: Int? = null
     ): Transaction = withContext(Dispatchers.IO) {
+        require(cartItems.isNotEmpty()) { "Cannot checkout with an empty cart." }
+        require(
+            !subtotal.isNaN() && !subtotal.isInfinite() && subtotal >= 0.0 &&
+                !taxAmount.isNaN() && !taxAmount.isInfinite() && taxAmount >= 0.0 &&
+                !totalAmount.isNaN() && !totalAmount.isInfinite() && totalAmount >= 0.0 &&
+                !cashPaid.isNaN() && !cashPaid.isInfinite() && cashPaid >= 0.0
+        ) {
+            "Checkout monetary amounts must be valid non-negative numbers."
+        }
+        require(
+            !gcashDelta.isNaN() && !gcashDelta.isInfinite() &&
+                !smartLoadDelta.isNaN() && !smartLoadDelta.isInfinite() &&
+                !globeLoadDelta.isNaN() && !globeLoadDelta.isInfinite()
+        ) {
+            "Wallet movement deltas must be finite numbers."
+        }
+
         val timestamp = System.currentTimeMillis()
         var createdTransactionId = 0
 
@@ -63,9 +81,13 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
         val normTax = StorePointRepository.roundMoney(taxAmount)
         val normTotal = StorePointRepository.roundMoney(totalAmount)
         val normCashPaid = StorePointRepository.roundMoney(cashPaid)
+        val normGcashDelta = StorePointRepository.roundMoney(gcashDelta)
+        val normSmartDelta = StorePointRepository.roundMoney(smartLoadDelta)
+        val normGlobeDelta = StorePointRepository.roundMoney(globeLoadDelta)
         val normChange = if (paymentMethod == "CASH") {
             StorePointRepository.roundMoney(normCashPaid - normTotal)
         } else 0.0
+        var resolvedCustomerName = customerName
 
         db.withTransaction {
             if (paymentMethod == "CASH" && normTotal > 0.0 && normCashPaid < normTotal) {
@@ -74,36 +96,69 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
                 )
             }
 
+            var sukiCustomerBalanceBefore = 0.0
+            if (paymentMethod.equals("SUKI_CREDIT", ignoreCase = true)) {
+                val cid = customerId
+                    ?: throw IllegalArgumentException("Select a Suki Tab customer account before charging credit.")
+                val account = db.customerCreditDao.getCustomerByIdSync(cid)
+                    ?: throw IllegalArgumentException("Suki Tab customer account #$cid not found.")
+                if (!account.isActive) {
+                    throw IllegalStateException("Suki Tab account for ${account.name} is inactive.")
+                }
+                if (account.creditLimit <= 0.0) {
+                    throw IllegalStateException("${account.name} has no credit limit configured.")
+                }
+                val projectedBalance = StorePointRepository.roundMoney(account.currentBalance + normTotal)
+                if (projectedBalance > StorePointRepository.roundMoney(account.creditLimit) + 0.001) {
+                    throw IllegalStateException(
+                        "Credit limit exceeded for ${account.name}: balance ${account.currentBalance} + $normTotal exceeds limit ${account.creditLimit}."
+                    )
+                }
+                sukiCustomerBalanceBefore = account.currentBalance
+                if (resolvedCustomerName.isBlank()) {
+                    resolvedCustomerName = account.name
+                }
+            }
+
             for (item in cartItems) {
+                if (item.quantity <= 0 || item.multiplier <= 0) {
+                    throw IllegalArgumentException("Invalid quantity for ${item.product.name}.")
+                }
+                if (item.selectedPrice.isNaN() || item.selectedPrice.isInfinite() || item.selectedPrice < 0.0) {
+                    throw IllegalArgumentException("Invalid unit price for ${item.product.name}.")
+                }
+                if (item.discountPerUnit.isNaN() || item.discountPerUnit.isInfinite() || item.discountPerUnit < 0.0) {
+                    throw IllegalArgumentException("Invalid discount for ${item.product.name}.")
+                }
                 val effectiveQty = item.quantity * item.multiplier
                 if (effectiveQty <= 0) {
                     throw IllegalArgumentException("Invalid quantity for ${item.product.name}.")
                 }
             }
 
-            if (gcashDelta != 0.0) {
+            if (normGcashDelta != 0.0) {
                 val balance = queryGcashBalance()
-                if (balance + gcashDelta < 0.0) {
+                if (StorePointRepository.roundMoney(balance + normGcashDelta) < 0.0) {
                     throw IllegalStateException(
-                        "Insufficient GCash wallet balance for this transaction (balance: $balance, required: ${-gcashDelta})."
+                        "Insufficient GCash wallet balance for this transaction (balance: $balance, required: ${-normGcashDelta})."
                     )
                 }
             }
 
-            if (smartLoadDelta != 0.0) {
+            if (normSmartDelta != 0.0) {
                 val balance = querySmartLoadBalance()
-                if (balance + smartLoadDelta < 0.0) {
+                if (StorePointRepository.roundMoney(balance + normSmartDelta) < 0.0) {
                     throw IllegalStateException(
-                        "Insufficient Smart Load wallet balance for this transaction (balance: $balance, required: ${-smartLoadDelta})."
+                        "Insufficient Smart Load wallet balance for this transaction (balance: $balance, required: ${-normSmartDelta})."
                     )
                 }
             }
 
-            if (globeLoadDelta != 0.0) {
+            if (normGlobeDelta != 0.0) {
                 val balance = queryGlobeLoadBalance()
-                if (balance + globeLoadDelta < 0.0) {
+                if (StorePointRepository.roundMoney(balance + normGlobeDelta) < 0.0) {
                     throw IllegalStateException(
-                        "Insufficient Globe Load wallet balance for this transaction (balance: $balance, required: ${-globeLoadDelta})."
+                        "Insufficient Globe Load wallet balance for this transaction (balance: $balance, required: ${-normGlobeDelta})."
                     )
                 }
             }
@@ -112,10 +167,26 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
                 "INSERT INTO transactions (timestamp, cashierUsername, subtotal, taxAmount, totalAmount, paymentMethod, cashPaid, changeAmount, status, customerName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 arrayOf<Any?>(
                     timestamp, cashierUsername, normSubtotal, normTax, normTotal,
-                    paymentMethod, normCashPaid, normChange, "COMPLETED", customerName
+                    paymentMethod, normCashPaid, normChange, "COMPLETED", resolvedCustomerName
                 )
             )
             createdTransactionId = lastInsertRowId()
+
+            if (paymentMethod.equals("SUKI_CREDIT", ignoreCase = true) && customerId != null) {
+                val newBalance = StorePointRepository.roundMoney(sukiCustomerBalanceBefore + normTotal)
+                db.openHelper.writableDatabase.execSQL(
+                    "UPDATE customer_accounts SET currentBalance = ?, updatedAt = ? WHERE id = ?",
+                    arrayOf<Any?>(newBalance, timestamp, customerId)
+                )
+                db.openHelper.writableDatabase.execSQL(
+                    "INSERT INTO customer_credit_ledger (customerId, timestamp, actorUsername, type, amount, balanceAfter, paymentMethod, transactionId, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf<Any?>(
+                        customerId, timestamp, cashierUsername, "CHARGE", normTotal,
+                        newBalance, "SUKI_CREDIT", createdTransactionId,
+                        "POS Sale #$createdTransactionId"
+                    )
+                )
+            }
 
             for (item in cartItems) {
                 val product = item.product
@@ -129,13 +200,19 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
                 } else {
                     "${product.name} ($uomName)"
                 }
-                val normItemPrice = StorePointRepository.roundMoney(item.selectedPrice)
+                val unitDiscount = StorePointRepository.roundMoney(
+                    item.discountPerUnit.coerceAtLeast(0.0).coerceAtMost(item.selectedPrice)
+                )
+                val normItemPrice = StorePointRepository.roundMoney(
+                    (item.selectedPrice - unitDiscount).coerceAtLeast(0.0)
+                )
+                val lineDiscountTotal = StorePointRepository.roundMoney(unitDiscount * item.quantity)
                 val normItemCost = StorePointRepository.roundMoney(product.cost * item.multiplier)
                 db.openHelper.writableDatabase.execSQL(
-                    "INSERT INTO transaction_items (transactionId, productId, productName, price, quantity, cost, uomName) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO transaction_items (transactionId, productId, productName, price, quantity, cost, uomName, discountAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     arrayOf<Any?>(
                         createdTransactionId, product.id, productName,
-                        normItemPrice, item.quantity, normItemCost, uomName
+                        normItemPrice, item.quantity, normItemCost, uomName, lineDiscountTotal
                     )
                 )
                 if (product.id > 0 && product.trackInventory) {
@@ -187,42 +264,42 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
                 }
             }
 
-            if (gcashDelta != 0.0) {
+            if (normGcashDelta != 0.0) {
                 db.openHelper.writableDatabase.execSQL(
-                    "UPDATE store_config SET gcashBalance = gcashBalance + ? WHERE id = 1",
-                    arrayOf<Any?>(gcashDelta)
+                    "UPDATE store_config SET gcashBalance = ROUND(gcashBalance + ?, 2) WHERE id = 1",
+                    arrayOf<Any?>(normGcashDelta)
                 )
                 logWalletConsumptionSync(
                     StorePointRepository.WalletType.GCASH,
-                    gcashDelta,
+                    normGcashDelta,
                     cashierUsername,
                     createdTransactionId,
                     resolvedGcashNotes
                 )
             }
 
-            if (smartLoadDelta != 0.0) {
+            if (normSmartDelta != 0.0) {
                 db.openHelper.writableDatabase.execSQL(
-                    "UPDATE store_config SET smartLoadBalance = smartLoadBalance + ? WHERE id = 1",
-                    arrayOf<Any?>(smartLoadDelta)
+                    "UPDATE store_config SET smartLoadBalance = ROUND(smartLoadBalance + ?, 2) WHERE id = 1",
+                    arrayOf<Any?>(normSmartDelta)
                 )
                 logWalletConsumptionSync(
                     StorePointRepository.WalletType.SMART,
-                    smartLoadDelta,
+                    normSmartDelta,
                     cashierUsername,
                     createdTransactionId,
                     resolvedSmartNotes
                 )
             }
 
-            if (globeLoadDelta != 0.0) {
+            if (normGlobeDelta != 0.0) {
                 db.openHelper.writableDatabase.execSQL(
-                    "UPDATE store_config SET globeLoadBalance = globeLoadBalance + ? WHERE id = 1",
-                    arrayOf<Any?>(globeLoadDelta)
+                    "UPDATE store_config SET globeLoadBalance = ROUND(globeLoadBalance + ?, 2) WHERE id = 1",
+                    arrayOf<Any?>(normGlobeDelta)
                 )
                 logWalletConsumptionSync(
                     StorePointRepository.WalletType.GLOBE,
-                    globeLoadDelta,
+                    normGlobeDelta,
                     cashierUsername,
                     createdTransactionId,
                     resolvedGlobeNotes
@@ -241,7 +318,7 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
             cashPaid = normCashPaid,
             changeAmount = normChange,
             status = "COMPLETED",
-            customerName = customerName
+            customerName = resolvedCustomerName
         )
     }
 
@@ -252,7 +329,26 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
     suspend fun getParkedItems(parkedId: Int): List<ParkedTransactionItem> =
         parkedTransactionDao.getParkedItems(parkedId)
 
-    suspend fun parkTransaction(note: String, items: List<Pair<Product, Int>>) = withContext(Dispatchers.IO) {
+    suspend fun parkTransaction(note: String, items: List<Pair<Product, Int>>) {
+        parkTransactionWithDetails(
+            note = note,
+            items = items.map { (product, qty) ->
+                CartItemDetails(
+                    product = product,
+                    quantity = qty,
+                    uomName = "Base Unit",
+                    multiplier = 1,
+                    selectedPrice = product.price,
+                    discountPerUnit = 0.0
+                )
+            }
+        )
+    }
+
+    suspend fun parkTransactionWithDetails(
+        note: String,
+        items: List<CartItemDetails>
+    ) = withContext(Dispatchers.IO) {
         val timestamp = System.currentTimeMillis()
         db.withTransaction {
             db.openHelper.writableDatabase.execSQL(
@@ -261,10 +357,15 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
             )
             val parkedId = lastInsertRowId()
             for (item in items) {
-                val product = item.first
+                val product = item.product
+                val normPrice = StorePointRepository.roundMoney(item.selectedPrice)
+                val normDiscount = StorePointRepository.roundMoney(item.discountPerUnit.coerceAtLeast(0.0))
                 db.openHelper.writableDatabase.execSQL(
-                    "INSERT INTO parked_transaction_items (parkedTransactionId, productId, productName, price, quantity) VALUES (?, ?, ?, ?, ?)",
-                    arrayOf<Any?>(parkedId, product.id, product.name, product.price, item.second)
+                    "INSERT INTO parked_transaction_items (parkedTransactionId, productId, productName, price, quantity, uomName, uomMultiplier, discountAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf<Any?>(
+                        parkedId, product.id, product.name, normPrice, item.quantity,
+                        item.uomName, item.multiplier.coerceAtLeast(1), normDiscount
+                    )
                 )
             }
         }
@@ -309,9 +410,81 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
         sessionId: Int?,
         newOriginalStatus: String
     ): ReturnTransaction = withContext(Dispatchers.IO) {
+        require(items.isNotEmpty()) { "At least one item is required to process a return." }
+        require(
+            !returnTx.totalRefundAmount.isNaN() &&
+                !returnTx.totalRefundAmount.isInfinite() &&
+                returnTx.totalRefundAmount > 0.0
+        ) {
+            "Refund amount must be greater than zero."
+        }
+        for (item in items) {
+            require(item.quantity > 0) { "Return quantity for ${item.productName} must be greater than zero." }
+            require(!item.unitPrice.isNaN() && !item.unitPrice.isInfinite() && item.unitPrice >= 0.0) {
+                "Invalid unit refund price for ${item.productName}."
+            }
+            require(!item.refundAmount.isNaN() && !item.refundAmount.isInfinite() && item.refundAmount >= 0.0) {
+                "Invalid refund line amount for ${item.productName}."
+            }
+        }
+
         var createdReturnId = 0
         val normTotalRefund = StorePointRepository.roundMoney(returnTx.totalRefundAmount)
         db.withTransaction {
+            val origTx = transactionDao.getTransactionById(returnTx.originalTransactionId)
+                ?: throw IllegalArgumentException("Original transaction #${returnTx.originalTransactionId} not found.")
+            if (origTx.status.equals("VOIDED", ignoreCase = true) ||
+                origTx.status.equals("CANCELLED", ignoreCase = true)
+            ) {
+                throw IllegalStateException("Cannot refund a voided or cancelled transaction (#${origTx.id}).")
+            }
+
+            // Enforce strict atomic anti-over-refund bounds against original lines & prior returns.
+            val origItems = transactionDao.getTransactionItemsSync(origTx.id)
+            val boughtQtyByProduct = mutableMapOf<Int, Int>()
+            for (oi in origItems) {
+                boughtQtyByProduct[oi.productId] = (boughtQtyByProduct[oi.productId] ?: 0) + oi.quantity
+            }
+            val priorReturnedQtyByProduct = queryPriorReturnedQtyByProduct(origTx.id)
+            val priorRefundedTotal = queryPriorRefundedTotal(origTx.id)
+
+            if (StorePointRepository.roundMoney(priorRefundedTotal + normTotalRefund) >
+                StorePointRepository.roundMoney(origTx.totalAmount) + 0.01
+            ) {
+                val remainingRefundable = StorePointRepository.roundMoney(
+                    (origTx.totalAmount - priorRefundedTotal).coerceAtLeast(0.0)
+                )
+                throw IllegalStateException(
+                    "Refund exceeds original sale amount: remaining refundable is $remainingRefundable, requested $normTotalRefund."
+                )
+            }
+
+            val requestedQtyByProduct = mutableMapOf<Int, Int>()
+            for (item in items) {
+                requestedQtyByProduct[item.productId] = (requestedQtyByProduct[item.productId] ?: 0) + item.quantity
+            }
+            for ((prodId, reqQty) in requestedQtyByProduct) {
+                val boughtQty = boughtQtyByProduct[prodId] ?: 0
+                val priorQty = priorReturnedQtyByProduct[prodId] ?: 0
+                if (boughtQty <= 0) {
+                    throw IllegalArgumentException("Product #$prodId was not part of transaction #${origTx.id}.")
+                }
+                if (priorQty + reqQty > boughtQty) {
+                    val remaining = (boughtQty - priorQty).coerceAtLeast(0)
+                    throw IllegalStateException(
+                        "Cannot return $reqQty unit(s) of product #$prodId: only $remaining returnable unit(s) remain."
+                    )
+                }
+            }
+
+            val totalOrigQty = boughtQtyByProduct.values.sum()
+            val totalReturnedAfter = priorReturnedQtyByProduct.values.sum() + requestedQtyByProduct.values.sum()
+            val authoritativeStatus = when {
+                totalOrigQty > 0 && totalReturnedAfter >= totalOrigQty -> "REFUNDED"
+                totalReturnedAfter > 0 -> "PARTIALLY_REFUNDED"
+                else -> newOriginalStatus
+            }
+
             db.openHelper.writableDatabase.execSQL(
                 "INSERT INTO return_transactions (originalTransactionId, timestamp, cashierUsername, totalRefundAmount, refundMethod, returnReason, customerName, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 arrayOf<Any?>(
@@ -333,13 +506,31 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
                         if (item.restockToInventory) 1 else 0
                     )
                 )
-                if (item.restockToInventory) {
+                if (item.restockToInventory && item.productId > 0) {
                     val uomMultiplier = resolveUomMultiplier(item.productId, item.uomName)
                     val baseUnitsToRestock = item.quantity * uomMultiplier
+                    val stockBefore = queryStock(item.productId)
                     db.openHelper.writableDatabase.execSQL(
                         "UPDATE products SET stockCount = stockCount + ? WHERE id = ?",
                         arrayOf<Any?>(baseUnitsToRestock, item.productId)
                     )
+                    if (queryChanges() > 0) {
+                        val stockAfter = queryStock(item.productId)
+                        db.inventoryMovementDao.insertMovementBlocking(
+                            InventoryMovementEntity(
+                                productId = item.productId,
+                                productName = item.productName,
+                                timestamp = returnTx.timestamp,
+                                actorUsername = returnTx.cashierUsername,
+                                movementType = "RETURN_RESTOCK",
+                                quantityDelta = baseUnitsToRestock.toDouble(),
+                                stockBefore = stockBefore,
+                                stockAfter = stockAfter,
+                                reference = "RET-$createdReturnId",
+                                notes = "Customer return restock from Tx #${origTx.id}"
+                            )
+                        )
+                    }
                 }
             }
 
@@ -354,12 +545,84 @@ internal class SalesCheckoutRepository(private val db: AppDatabase) {
                 )
             }
 
+            // Suki Tab Credit Reversal: if the original sale was charged to Suki Tab (or refunded
+            // back to Suki credit), credit back the customer's balance and record an auditable REFUND entry.
+            if (origTx.paymentMethod.equals("SUKI_CREDIT", ignoreCase = true) ||
+                returnTx.refundMethod.equals("SUKI_CREDIT", ignoreCase = true)
+            ) {
+                val sukiCustomerId = querySukiCustomerIdForTransaction(origTx.id)
+                if (sukiCustomerId != null) {
+                    val customer = db.customerCreditDao.getCustomerByIdSync(sukiCustomerId)
+                    if (customer != null && customer.currentBalance > 0.0) {
+                        val creditReduction = StorePointRepository.roundMoney(
+                            normTotalRefund.coerceAtMost(customer.currentBalance)
+                        )
+                        val newBalance = StorePointRepository.roundMoney(
+                            (customer.currentBalance - creditReduction).coerceAtLeast(0.0)
+                        )
+                        val now = System.currentTimeMillis()
+                        db.openHelper.writableDatabase.execSQL(
+                            "UPDATE customer_accounts SET currentBalance = ?, updatedAt = ? WHERE id = ?",
+                            arrayOf<Any?>(newBalance, now, sukiCustomerId)
+                        )
+                        db.openHelper.writableDatabase.execSQL(
+                            "INSERT INTO customer_credit_ledger (customerId, timestamp, actorUsername, type, amount, balanceAfter, paymentMethod, transactionId, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            arrayOf<Any?>(
+                                sukiCustomerId, now, returnTx.cashierUsername, "REFUND",
+                                creditReduction, newBalance, "SUKI_CREDIT", origTx.id,
+                                "Refund Return #$createdReturnId (Tx #${origTx.id})"
+                            )
+                        )
+                    }
+                }
+            }
+
             db.openHelper.writableDatabase.execSQL(
                 "UPDATE transactions SET status = ? WHERE id = ?",
-                arrayOf<Any?>(newOriginalStatus, returnTx.originalTransactionId)
+                arrayOf<Any?>(authoritativeStatus, returnTx.originalTransactionId)
             )
         }
         returnTx.copy(id = createdReturnId, totalRefundAmount = normTotalRefund)
+    }
+
+    private fun queryPriorReturnedQtyByProduct(originalTxId: Int): Map<Int, Int> {
+        val result = mutableMapOf<Int, Int>()
+        val cursor = db.query(
+            """
+            SELECT ri.productId AS pid, COALESCE(SUM(ri.quantity), 0) AS qty
+            FROM return_items ri
+            INNER JOIN return_transactions rt ON rt.id = ri.returnTransactionId
+            WHERE rt.originalTransactionId = ?
+            GROUP BY ri.productId
+            """.trimIndent(),
+            arrayOf<Any?>(originalTxId)
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                result[it.getInt(it.getColumnIndexOrThrow("pid"))] = it.getInt(it.getColumnIndexOrThrow("qty"))
+            }
+        }
+        return result
+    }
+
+    private fun queryPriorRefundedTotal(originalTxId: Int): Double {
+        val cursor = db.query(
+            "SELECT COALESCE(SUM(totalRefundAmount), 0.0) AS total FROM return_transactions WHERE originalTransactionId = ?",
+            arrayOf<Any?>(originalTxId)
+        )
+        return cursor.use {
+            if (it.moveToNext()) StorePointRepository.roundMoney(it.getDouble(it.getColumnIndexOrThrow("total"))) else 0.0
+        }
+    }
+
+    private fun querySukiCustomerIdForTransaction(originalTxId: Int): Int? {
+        val cursor = db.query(
+            "SELECT customerId FROM customer_credit_ledger WHERE transactionId = ? AND type = 'CHARGE' LIMIT 1",
+            arrayOf<Any?>(originalTxId)
+        )
+        return cursor.use {
+            if (it.moveToNext()) it.getInt(0) else null
+        }
     }
 
     // --- Raw transactional helpers ---

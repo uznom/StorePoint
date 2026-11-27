@@ -133,20 +133,37 @@ internal fun StorePointViewModel.authSwitchCashierWithPinImpl(
     onResult: (Boolean, String, User?) -> Unit
 ) {
     viewModelScope.launch {
+        val now = System.currentTimeMillis()
+        val lockKey = "quick_switch_pin"
+        val lockedUntil = prefs.getLong("${lockKey}_locked_until", 0L)
+        if (now < lockedUntil) {
+            val remainSec = ((lockedUntil - now) / 1000).toInt().coerceAtLeast(1)
+            onResult(false, "Too many invalid PIN attempts. Try again in ${remainSec}s.", null)
+            return@launch
+        }
         if (!SecurityHelper.isValidPin(pin)) {
             onResult(false, "PIN must be exactly 4 numeric digits.", null)
             return@launch
         }
-        val users = allUsers.value
-        val match = users.firstOrNull { SecurityHelper.verifyPin(pin, it.pinHash).isMatch }
+        val users = repository.getAllUsersSync().ifEmpty { allUsers.value }
+        val match = users.firstOrNull { !it.pinResetRequired && SecurityHelper.verifyPin(pin, it.pinHash).isMatch }
         if (match != null) {
+            prefs.edit().putInt("${lockKey}_fails", 0).putLong("${lockKey}_locked_until", 0L).apply()
             activeUser.value = match
             lastLoggedInUser.value = match.username
             prefs.edit().putString("last_logged_in_user", match.username).apply()
             playBeep()
             onResult(true, "Switched to ${match.username.uppercase()} (${match.role})", match)
         } else {
-            onResult(false, "Invalid staff PIN. No account matched.", null)
+            val fails = prefs.getInt("${lockKey}_fails", 0) + 1
+            if (fails >= 5) {
+                prefs.edit().putInt("${lockKey}_fails", 0).putLong("${lockKey}_locked_until", now + 60_000L).apply()
+                onResult(false, "Too many invalid staff PIN attempts. Locked for 60 seconds.", null)
+            } else {
+                prefs.edit().putInt("${lockKey}_fails", fails).apply()
+                val remaining = 5 - fails
+                onResult(false, "Invalid staff PIN. $remaining attempt${if (remaining == 1) "" else "s"} left.", null)
+            }
         }
     }
 }
@@ -165,6 +182,14 @@ internal fun StorePointViewModel.authResetAdminPinImpl(
     onResult: (Boolean, String) -> Unit
 ) {
     viewModelScope.launch {
+        val now = System.currentTimeMillis()
+        val lockKey = "admin_pin_reset_$adminUsername"
+        val lockedUntil = prefs.getLong("${lockKey}_locked_until", 0L)
+        if (now < lockedUntil) {
+            val remainSec = ((lockedUntil - now) / 1000).toInt().coerceAtLeast(1)
+            onResult(false, "Too many failed attempts. Try again in ${remainSec}s.")
+            return@launch
+        }
         if (!SecurityHelper.isValidPin(newPin)) {
             onResult(false, "New PIN must be exactly 4 digits.")
             return@launch
@@ -179,9 +204,9 @@ internal fun StorePointViewModel.authResetAdminPinImpl(
             return@launch
         }
 
-        val verification = SecurityHelper.verifyPin(currentPinOrRecoveryKey, user.pinHash)
-        val isMasterRecoveryKey = currentPinOrRecoveryKey.trim() == "88889999"
-        if (verification.isMatch || isMasterRecoveryKey) {
+        val verification = SecurityHelper.verifyPinLenient(currentPinOrRecoveryKey, user.pinHash)
+        if (verification.isMatch) {
+            prefs.edit().putInt("${lockKey}_fails", 0).putLong("${lockKey}_locked_until", 0L).apply()
             val updatedUser = user.copy(
                 pinHash = SecurityHelper.hashPin(newPin),
                 pinResetRequired = false
@@ -189,7 +214,16 @@ internal fun StorePointViewModel.authResetAdminPinImpl(
             repository.saveUser(updatedUser)
             onResult(true, "Admin PIN successfully updated!")
         } else {
-            onResult(false, "Authorization failed. Current PIN or Recovery Master Key incorrect.")
+            val fails = prefs.getInt("${lockKey}_fails", 0) + 1
+            if (fails >= 4) {
+                val window = lockoutWindowFor(fails - 4)
+                prefs.edit().putInt("${lockKey}_fails", 0).putLong("${lockKey}_locked_until", now + window).apply()
+                onResult(false, "Too many failed attempts. Locked for ${window / 1000} seconds.")
+            } else {
+                prefs.edit().putInt("${lockKey}_fails", fails).apply()
+                val remaining = 4 - fails
+                onResult(false, "Current Admin PIN is incorrect. $remaining attempt${if (remaining == 1) "" else "s"} left.")
+            }
         }
     }
 }

@@ -61,8 +61,6 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <!-- SECURITY (audit M1): External VIEW/SEND intent-filters were removed.
                  MainActivity never parsed incoming intent data (no getIntent()/onNewIntent
@@ -70,6 +68,20 @@
                  that bypassed the admin-PIN gate. Imports go through the in-app SAF pickers
                  in AdminSecurityTab, which are gated by verifyAdminPin(). -->
         </activity>
+
+        <!-- Opt-in kiosk Home launcher alias (disabled by default so normal installs and
+             preview emulators launch MainActivity directly without triggering a Home app chooser). -->
+        <activity-alias
+            android:name=".KioskHomeAlias"
+            android:enabled="false"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"

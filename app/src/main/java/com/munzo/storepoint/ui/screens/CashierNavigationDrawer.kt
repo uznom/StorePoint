@@ -12,14 +12,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
@@ -28,15 +25,16 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.AssignmentReturn
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Transform
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,17 +49,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,18 +66,13 @@ import com.munzo.storepoint.ui.components.HeroButton
 import com.munzo.storepoint.ui.components.HeroButtonVariant
 import com.munzo.storepoint.ui.components.HeroColor
 import com.munzo.storepoint.ui.components.HeroDivider
-import com.munzo.storepoint.ui.components.HeroInput
 import com.munzo.storepoint.ui.components.HeroSize
-import com.munzo.storepoint.ui.components.HeroTextButton
 import com.munzo.storepoint.ui.theme.ExpressiveButtonShape
 import com.munzo.storepoint.ui.theme.TactileHapticRole
 import com.munzo.storepoint.ui.theme.elasticValuePop
 import com.munzo.storepoint.ui.theme.expressiveGlassCard
 import com.munzo.storepoint.ui.theme.rememberTactileFeedback
 import com.munzo.storepoint.util.APP_VERSION
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,10 +82,12 @@ internal fun CashierTopAppBar(
     storeName: String,
     activeUser: User?,
     parkedCount: Int,
+    pendingPrintCount: Int,
     onOpenDrawer: () -> Unit,
     onCallAdmin: () -> Unit,
     onReturns: () -> Unit,
     onParked: () -> Unit,
+    onPrintQueue: () -> Unit,
     onTerminalApps: () -> Unit,
     onAbout: () -> Unit
 ) {
@@ -206,6 +195,28 @@ internal fun CashierTopAppBar(
                 IconButton(
                     onClick = {
                         tactile.perform(TactileHapticRole.Tap)
+                        onPrintQueue()
+                    },
+                    modifier = Modifier.testTag("top_bar_print_queue_btn")
+                ) {
+                    BadgedBox(
+                        badge = {
+                            if (pendingPrintCount > 0) {
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.elasticValuePop(pendingPrintCount)
+                                ) {
+                                    Text("$pendingPrintCount")
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Print, contentDescription = "Thermal Print Queue ($pendingPrintCount)")
+                    }
+                }
+                IconButton(
+                    onClick = {
+                        tactile.perform(TactileHapticRole.Tap)
                         onTerminalApps()
                     },
                     modifier = Modifier.testTag("top_bar_terminal_apps_btn")
@@ -244,6 +255,8 @@ internal fun CashierDrawerContent(
     onCloseDrawer: () -> Unit,
     onFastCashierSwitch: () -> Unit,
     onCashInOut: () -> Unit,
+    onSukiTab: () -> Unit,
+    onXReading: () -> Unit,
     onReturns: () -> Unit,
     onBulkProduction: () -> Unit,
     onCallAdmin: () -> Unit,
@@ -420,6 +433,28 @@ internal fun CashierDrawerContent(
             )
 
             NavigationDrawerItem(
+                icon = { Icon(Icons.Default.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                label = { Text("Suki Tab (Utang)", fontWeight = FontWeight.SemiBold) },
+                selected = false,
+                onClick = {
+                    onCloseDrawer()
+                    onSukiTab()
+                },
+                modifier = Modifier.testTag("drawer_suki_tab")
+            )
+
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                label = { Text("Mid-Shift X-Reading", fontWeight = FontWeight.SemiBold) },
+                selected = false,
+                onClick = {
+                    onCloseDrawer()
+                    onXReading()
+                },
+                modifier = Modifier.testTag("drawer_x_reading")
+            )
+
+            NavigationDrawerItem(
                 icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 label = { Text("Switch Staff / Cashier", fontWeight = FontWeight.SemiBold) },
                 selected = false,
@@ -573,179 +608,5 @@ internal fun CashierDrawerContent(
                     }
             )
         }
-    }
-}
-
-@Composable
-private fun CashierDrawerBalancesCard(
-    session: CashierSession,
-    storeConfig: StoreConfig?,
-    curr: String,
-    isSensitiveDataVisible: Boolean,
-    viewModel: StorePointViewModel,
-    onCashInOut: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Shift Started", style = MaterialTheme.typography.bodySmall)
-            val startTimeFormatted = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(session.startTime))
-            Text(
-                text = if (isSensitiveDataVisible) startTimeFormatted else "••:••",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text("Starting cash drawer", style = MaterialTheme.typography.bodySmall)
-                Text(
-                    text = if (isSensitiveDataVisible) "$curr${String.format(Locale.getDefault(), "%.2f", session.startingCash)}" else "$curr••••",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            HeroTextButton(
-                onClick = onCashInOut,
-                modifier = Modifier.testTag("quick_cash_in_out_btn"),
-                icon = Icons.Default.PointOfSale,
-                size = HeroSize.Sm,
-                text = "Cash In/Out"
-            )
-        }
-
-        if (storeConfig?.hasGCash == true) {
-            WalletBalanceRowWithAdjust(
-                title = "GCash Balance",
-                dialogTitle = "Update GCash Balance",
-                dialogBody = "Enter the accurate secondary GCash digital balance of this outlet's retailing account:",
-                fieldLabel = "GCash Balance ($curr)",
-                buttonTag = "drawer_adjust_gcash_btn",
-                fieldTag = "temp_gcash_balance_field",
-                balance = storeConfig.gcashBalance,
-                curr = curr,
-                isSensitiveDataVisible = isSensitiveDataVisible,
-                valueColor = MaterialTheme.colorScheme.tertiary,
-                onSave = { viewModel.updateGCashBalance(it) }
-            )
-        }
-
-        if (storeConfig?.hasLoad == true) {
-            WalletBalanceRowWithAdjust(
-                title = "Smart/TNT Load Wallet",
-                dialogTitle = "Update Smart/TNT Load Wallet",
-                dialogBody = "Enter current retailer load wallet balance for Smart/TNT (2% rebate active):",
-                fieldLabel = "Smart Load Balance ($curr)",
-                buttonTag = "drawer_adjust_smart_btn",
-                fieldTag = "temp_smart_balance_field",
-                balance = storeConfig.smartLoadBalance,
-                curr = curr,
-                isSensitiveDataVisible = isSensitiveDataVisible,
-                valueColor = MaterialTheme.colorScheme.primary,
-                onSave = { viewModel.updateSmartLoadBalance(it) }
-            )
-
-            WalletBalanceRowWithAdjust(
-                title = "Globe/TM Load Wallet",
-                dialogTitle = "Update Globe/TM Load Wallet",
-                dialogBody = "Enter current retailer load wallet balance for Globe/TM (2% rebate active):",
-                fieldLabel = "Globe Load Balance ($curr)",
-                buttonTag = "drawer_adjust_globe_btn",
-                fieldTag = "temp_globe_balance_field",
-                balance = storeConfig.globeLoadBalance,
-                curr = curr,
-                isSensitiveDataVisible = isSensitiveDataVisible,
-                valueColor = MaterialTheme.colorScheme.secondary,
-                onSave = { viewModel.updateGlobeLoadBalance(it) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun WalletBalanceRowWithAdjust(
-    title: String,
-    dialogTitle: String,
-    dialogBody: String,
-    fieldLabel: String,
-    buttonTag: String,
-    fieldTag: String,
-    balance: Double,
-    curr: String,
-    isSensitiveDataVisible: Boolean,
-    valueColor: Color,
-    onSave: (Double) -> Unit
-) {
-    var showDialog by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(title, style = MaterialTheme.typography.bodySmall)
-            Text(
-                text = if (isSensitiveDataVisible) "$curr${String.format(Locale.getDefault(), "%.2f", balance)}" else "$curr••••",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
-                color = valueColor
-            )
-        }
-
-        HeroTextButton(
-            onClick = { showDialog = true },
-            modifier = Modifier.testTag(buttonTag),
-            icon = Icons.Default.Edit,
-            size = HeroSize.Sm,
-            text = "Adjust"
-        )
-    }
-
-    if (showDialog) {
-        var tempBalStr by remember(balance) { mutableStateOf(balance.toString()) }
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text(dialogTitle) },
-            text = {
-                Column(
-                    modifier = Modifier.imePadding(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(dialogBody, style = MaterialTheme.typography.bodyMedium)
-                    HeroInput(
-                        value = tempBalStr,
-                        onValueChange = { tempBalStr = it },
-                        label = { Text(fieldLabel) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(fieldTag)
-                    )
-                }
-            },
-            confirmButton = {
-                HeroButton(
-                    onClick = {
-                        onSave(tempBalStr.toDoubleOrNull() ?: balance)
-                        showDialog = false
-                    },
-                    text = "Save"
-                )
-            },
-            dismissButton = {
-                HeroTextButton(onClick = { showDialog = false }, text = "Cancel")
-            }
-        )
     }
 }

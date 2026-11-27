@@ -105,7 +105,8 @@ data class Product(
     val barcodeCustomUom: String = "",
     val baseUom: String = "pc",
     val trackInventory: Boolean = true,
-    val isArchived: Boolean = false
+    val isArchived: Boolean = false,
+    val isQuickSellPinned: Boolean = false
 )
 
 @Entity(
@@ -213,7 +214,8 @@ data class CartItemDetails(
     val quantity: Int,
     val uomName: String,
     val multiplier: Int,
-    val selectedPrice: Double
+    val selectedPrice: Double,
+    val discountPerUnit: Double = 0.0
 )
 
 data class UomOption(
@@ -292,7 +294,8 @@ data class TransactionItem(
     val price: Double,
     val quantity: Int,
     val cost: Double = 0.0,
-    val uomName: String = "pc"
+    val uomName: String = "pc",
+    val discountAmount: Double = 0.0
 )
 
 @Entity(
@@ -444,7 +447,10 @@ data class ParkedTransactionItem(
     val productId: Int,
     val productName: String,
     val price: Double,
-    val quantity: Int
+    val quantity: Int,
+    val uomName: String = "Base Unit",
+    val uomMultiplier: Int = 1,
+    val discountAmount: Double = 0.0
 )
 
 @Entity(tableName = "payment_schedules")

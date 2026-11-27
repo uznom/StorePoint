@@ -68,12 +68,18 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE isArchived = 0 ORDER BY name ASC")
     suspend fun getAllCategoriesSync(): List<Category>
 
+    @Query("SELECT * FROM categories ORDER BY id ASC")
+    suspend fun getAllCategoriesIncludingArchivedSync(): List<Category>
+
     @RoomTransaction
     @Query("SELECT * FROM categories WHERE isArchived = 0 ORDER BY name ASC")
     fun getCategoriesWithProducts(): Flow<List<CategoryWithProducts>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCategory(category: Category)
+
+    @Update
+    suspend fun updateCategory(category: Category)
 
     @Query("UPDATE categories SET isArchived = 1 WHERE id = :id")
     suspend fun archiveCategory(id: Int)
@@ -92,6 +98,9 @@ interface ProductDao {
 
     @Query("SELECT * FROM products WHERE isArchived = 0 ORDER BY name ASC")
     suspend fun getAllProductsSync(): List<Product>
+
+    @Query("SELECT * FROM products ORDER BY id ASC")
+    suspend fun getAllProductsIncludingArchivedSync(): List<Product>
 
     @Query("SELECT * FROM products WHERE isArchived = 1 ORDER BY name ASC")
     fun getArchivedProducts(): Flow<List<Product>>
@@ -113,6 +122,12 @@ interface ProductDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProduct(product: Product)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProductReturningId(product: Product): Long
+
+    @Update
+    suspend fun updateProduct(product: Product)
+
     @Query("UPDATE products SET isArchived = 1 WHERE id = :id")
     suspend fun archiveProduct(id: Int)
 
@@ -127,6 +142,15 @@ interface ProductDao {
 
     @Query("UPDATE products SET stockCount = :newStock, cost = :newCost WHERE id = :productId")
     suspend fun updateStockAndCost(productId: Int, newStock: Int, newCost: Double)
+
+    @Query("UPDATE products SET stockCount = stockCount + :delta WHERE id = :productId")
+    suspend fun incrementStock(productId: Int, delta: Int)
+
+    @Query("UPDATE products SET stockCount = stockCount + :delta, cost = :newCost WHERE id = :productId")
+    suspend fun incrementStockAndUpdateCost(productId: Int, delta: Int, newCost: Double)
+
+    @Query("UPDATE products SET isQuickSellPinned = :pinned WHERE id = :productId")
+    suspend fun updateQuickSellPinned(productId: Int, pinned: Boolean)
 }
 
 @Dao

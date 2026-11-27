@@ -43,7 +43,13 @@ internal class PurchasingProductionRepository(private val db: AppDatabase) {
 
     suspend fun getSupplierById(id: Int): Supplier? = supplierDao.getSupplierById(id)
 
-    suspend fun saveSupplier(supplier: Supplier): Long = supplierDao.insertSupplier(supplier)
+    suspend fun saveSupplier(supplier: Supplier): Long =
+        if (supplier.id > 0) {
+            supplierDao.updateSupplier(supplier)
+            supplier.id.toLong()
+        } else {
+            supplierDao.insertSupplier(supplier)
+        }
 
     suspend fun updateSupplier(supplier: Supplier) {
         supplierDao.updateSupplier(supplier)
@@ -73,7 +79,13 @@ internal class PurchasingProductionRepository(private val db: AppDatabase) {
     suspend fun getPurchaseOrderWithItems(id: Int): PurchaseOrderWithItems? =
         purchaseOrderDao.getPurchaseOrderWithItems(id)
 
-    suspend fun savePurchaseOrder(po: PurchaseOrder): Long = purchaseOrderDao.insertPurchaseOrder(po)
+    suspend fun savePurchaseOrder(po: PurchaseOrder): Long =
+        if (po.id > 0) {
+            purchaseOrderDao.updatePurchaseOrder(po)
+            po.id.toLong()
+        } else {
+            purchaseOrderDao.insertPurchaseOrder(po)
+        }
 
     suspend fun updatePurchaseOrder(po: PurchaseOrder) {
         purchaseOrderDao.updatePurchaseOrder(po)
@@ -137,19 +149,51 @@ internal class PurchasingProductionRepository(private val db: AppDatabase) {
         paymentStatus: String
     ) = withContext(Dispatchers.IO) {
         db.withTransaction {
+            val existingPo = purchaseOrderDao.getPurchaseOrderById(poId)
+                ?: throw IllegalArgumentException("Purchase order #$poId not found.")
+            if (existingPo.status.equals("RECEIVED", ignoreCase = true)) {
+                throw IllegalStateException("Purchase order ${existingPo.poNumber} has already been received.")
+            }
+            if (existingPo.status.equals("CANCELED", ignoreCase = true) ||
+                existingPo.status.equals("CANCELLED", ignoreCase = true)
+            ) {
+                throw IllegalStateException("Cannot receive a canceled purchase order (${existingPo.poNumber}).")
+            }
+
             for (line in receivedItems) {
                 if (line.quantityReceived <= 0) continue
+                require(!line.newUnitCost.isNaN() && !line.newUnitCost.isInfinite() && line.newUnitCost >= 0.0) {
+                    "Invalid unit cost for product #${line.productId}."
+                }
+                val safeCost = StorePointRepository.roundMoney(line.newUnitCost)
+                val stockBefore = queryStock(line.productId)
+                val productName = queryProductName(line.productId)
                 db.openHelper.writableDatabase.execSQL(
                     "UPDATE products SET stockCount = stockCount + ? WHERE id = ?",
                     arrayOf<Any?>(line.quantityReceived, line.productId)
                 )
                 db.openHelper.writableDatabase.execSQL(
                     "UPDATE products SET cost = ? WHERE id = ?",
-                    arrayOf<Any?>(line.newUnitCost, line.productId)
+                    arrayOf<Any?>(safeCost, line.productId)
                 )
                 db.openHelper.writableDatabase.execSQL(
                     "UPDATE purchase_order_items SET quantityReceived = ? WHERE purchaseOrderId = ? AND productId = ?",
                     arrayOf<Any?>(line.quantityReceived, poId, line.productId)
+                )
+                val stockAfter = queryStock(line.productId)
+                inventoryMovementDao.insertMovementBlocking(
+                    InventoryMovementEntity(
+                        productId = line.productId,
+                        productName = productName,
+                        timestamp = receivedDate,
+                        actorUsername = "purchasing",
+                        movementType = "PO_RECEIVE",
+                        quantityDelta = line.quantityReceived.toDouble(),
+                        stockBefore = stockBefore,
+                        stockAfter = stockAfter,
+                        reference = existingPo.poNumber,
+                        notes = "Received from ${existingPo.supplierName} (Unit cost: $safeCost)"
+                    )
                 )
             }
             db.openHelper.writableDatabase.execSQL(
@@ -183,10 +227,31 @@ internal class PurchasingProductionRepository(private val db: AppDatabase) {
         productionRun: ProductionLogEntity,
         saveAsBom: Boolean = false
     ): ProductionLogEntity = withContext(Dispatchers.IO) {
+        val rawQtyInt = productionRun.rawMaterialQtyUsed.toInt()
+        val producedQtyInt = productionRun.targetRetailQtyProduced.toInt()
+        require(rawQtyInt > 0) { "Raw material quantity used must be greater than zero." }
+        require(producedQtyInt > 0) { "Target retail quantity produced must be greater than zero." }
+        require(productionRun.rawMaterialProductId != productionRun.targetRetailProductId) {
+            "Raw material and target retail product must be different products."
+        }
+        require(
+            !productionRun.derivedRetailUnitCost.isNaN() &&
+                !productionRun.derivedRetailUnitCost.isInfinite() &&
+                productionRun.derivedRetailUnitCost >= 0.0
+        ) {
+            "Derived retail unit cost must be a valid non-negative number."
+        }
+        require(
+            !productionRun.retailSellingPrice.isNaN() &&
+                !productionRun.retailSellingPrice.isInfinite() &&
+                productionRun.retailSellingPrice >= 0.0
+        ) {
+            "Retail selling price must be a valid non-negative number."
+        }
+
         var savedRunId = 0L
         db.withTransaction {
             val rawStockCurrent = queryStock(productionRun.rawMaterialProductId)
-            val rawQtyInt = productionRun.rawMaterialQtyUsed.toInt()
 
             db.openHelper.writableDatabase.execSQL(
                 "UPDATE products SET stockCount = stockCount - ? WHERE id = ? AND stockCount >= ?",
@@ -284,6 +349,13 @@ internal class PurchasingProductionRepository(private val db: AppDatabase) {
         val cursor = db.query("SELECT stockCount AS s FROM products WHERE id = ?", arrayOf<Any?>(productId))
         return cursor.use {
             if (it.moveToNext()) it.getInt(it.getColumnIndexOrThrow("s")) else 0
+        }
+    }
+
+    private fun queryProductName(productId: Int): String {
+        val cursor = db.query("SELECT name AS n FROM products WHERE id = ?", arrayOf<Any?>(productId))
+        return cursor.use {
+            if (it.moveToNext()) it.getString(it.getColumnIndexOrThrow("n")) else "Product #$productId"
         }
     }
 

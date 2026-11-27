@@ -6,7 +6,7 @@ plugins {
 
 android {
   namespace = "com.munzo.storepoint"
-  compileSdk = 37
+  compileSdk = 36
 
   defaultConfig {
     applicationId = "com.munzo.storepoint"
@@ -49,6 +49,7 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
+      isCrunchPngs = false
       signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
@@ -59,6 +60,9 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
+    aidl = false
+    resValues = false
+    shaders = false
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
   lint {
@@ -91,7 +95,6 @@ dependencies {
   implementation(libs.androidx.camera.view)
   implementation(libs.mlkit.barcode.scanning)
   implementation(libs.androidx.compose.material.icons.core)
-  implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.graphics.shapes)
   implementation(libs.androidx.compose.ui)

@@ -73,6 +73,7 @@ fun CashierPOSScreen(
     val products by viewModel.allProducts.collectAsState()
     val cartItems by viewModel.cart.collectAsState()
     val parkedList by viewModel.parkedTransactions.collectAsState()
+    val pendingPrintJobs by viewModel.pendingPrintJobs.collectAsState()
     val isScannerOpen by viewModel.isScannerOpen.collectAsState()
     val isKioskActive by viewModel.isKioskModeActive.collectAsState()
     val selectedCartUoms by viewModel.selectedCartUoms.collectAsState()
@@ -118,6 +119,9 @@ fun CashierPOSScreen(
     var showReturnRefundDialog by remember { mutableStateOf(false) }
     var showBulkProductionDialog by remember { mutableStateOf(false) }
     var showDrawerCashInOutDialog by remember { mutableStateOf(false) }
+    var showSukiTabDialog by remember { mutableStateOf(false) }
+    var showPrintQueueDialog by remember { mutableStateOf(false) }
+    var showXReadingDialog by remember { mutableStateOf(false) }
     var showFastCashierSwitchDialog by remember { mutableStateOf(false) }
     var productForVariantPicker by remember { mutableStateOf<Product?>(null) }
     var productForDiscountDialog by remember { mutableStateOf<Product?>(null) }
@@ -173,6 +177,16 @@ fun CashierPOSScreen(
         }
     }
 
+    // Hands-free USB / Bluetooth HID hardware barcode scanner capture
+    LaunchedEffect(Unit) {
+        viewModel.hidBarcodeScans.collect { scannedBarcode ->
+            if (activeSession != null && !showPaymentDialog && !showShiftStartDialog && !showShiftCloseDialog) {
+                tactile.perform(TactileHapticRole.ScanSuccess)
+                viewModel.handleBarcodeScan(scannedBarcode)
+            }
+        }
+    }
+
     val hotkeyModifier = Modifier.onKeyEvent { keyEvent ->
         if (keyEvent.type == KeyEventType.KeyDown) {
             when (keyEvent.key) {
@@ -215,6 +229,8 @@ fun CashierPOSScreen(
                 onCloseDrawer = { coroutineScope.launch { drawerState.close() } },
                 onFastCashierSwitch = { showFastCashierSwitchDialog = true },
                 onCashInOut = { showDrawerCashInOutDialog = true },
+                onSukiTab = { showSukiTabDialog = true },
+                onXReading = { showXReadingDialog = true },
                 onReturns = { showReturnRefundDialog = true },
                 onBulkProduction = { showBulkProductionDialog = true },
                 onCallAdmin = { showCallAdminDialog = true },
@@ -245,10 +261,12 @@ fun CashierPOSScreen(
                         storeName = storeConfig?.storeName ?: "StorePoint POS",
                         activeUser = activeUser,
                         parkedCount = parkedList.size,
+                        pendingPrintCount = pendingPrintJobs.size,
                         onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
                         onCallAdmin = { showCallAdminDialog = true },
                         onReturns = { showReturnRefundDialog = true },
                         onParked = { showParkedTxDialog = true },
+                        onPrintQueue = { showPrintQueueDialog = true },
                         onTerminalApps = { showTerminalAppsDialog = true },
                         onAbout = { showAboutDialog = true }
                     )
@@ -620,6 +638,18 @@ fun CashierPOSScreen(
 
             if (showDrawerCashInOutDialog) {
                 DrawerCashInOutDialog(viewModel = viewModel, onDismiss = { showDrawerCashInOutDialog = false })
+            }
+
+            if (showSukiTabDialog) {
+                CashierSukiTabDialog(viewModel = viewModel, curr = curr, onDismiss = { showSukiTabDialog = false })
+            }
+
+            if (showPrintQueueDialog) {
+                PrintQueueDialog(viewModel = viewModel, onDismiss = { showPrintQueueDialog = false })
+            }
+
+            if (showXReadingDialog) {
+                ShiftXReadingDialog(viewModel = viewModel, curr = curr, onDismiss = { showXReadingDialog = false })
             }
 
             if (showFastCashierSwitchDialog) {

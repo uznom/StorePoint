@@ -340,7 +340,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) },
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                                 .testTag("currency_selector_input"),
                                             shape = HeroUITheme.radius.md
                                         )
@@ -386,7 +386,7 @@ fun SetupScreen(viewModel: StorePointViewModel) {
                                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                             .testTag("currency_selector_input"),
                                         shape = HeroUITheme.radius.md
                                     )

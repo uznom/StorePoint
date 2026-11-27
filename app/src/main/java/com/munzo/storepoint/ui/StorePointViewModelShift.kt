@@ -15,20 +15,29 @@ internal fun StorePointViewModel.shiftStartCashierShiftImpl(
     startingGlobeLoad: Double? = null
 ) {
     viewModelScope.launch {
+        if (!startingCash.isFinite() || startingCash < 0.0) {
+            Toast.makeText(context, "Starting cash must be zero or greater.", Toast.LENGTH_SHORT).show()
+            return@launch
+        }
         val username = activeUser.value?.username ?: "system_user"
         val normCash = StorePointRepository.roundMoney(startingCash)
         val started = repository.startSession(username, normCash)
         if (started) {
-            val currentConfig = repository.getStoreConfigSync()
-            if (currentConfig != null && (startingSmartLoad != null || startingGlobeLoad != null)) {
-                var updated = currentConfig
-                if (startingSmartLoad != null) {
-                    updated = updated.copy(smartLoadBalance = StorePointRepository.roundMoney(startingSmartLoad))
-                }
-                if (startingGlobeLoad != null) {
-                    updated = updated.copy(globeLoadBalance = StorePointRepository.roundMoney(startingGlobeLoad))
-                }
-                repository.saveStoreConfig(updated)
+            if (startingSmartLoad != null && startingSmartLoad.isFinite() && startingSmartLoad >= 0.0) {
+                repository.reconcileWallet(
+                    walletType = StorePointRepository.WalletType.SMART,
+                    countedBalance = StorePointRepository.roundMoney(startingSmartLoad),
+                    actorUsername = username,
+                    notes = "Shift start float verification"
+                )
+            }
+            if (startingGlobeLoad != null && startingGlobeLoad.isFinite() && startingGlobeLoad >= 0.0) {
+                repository.reconcileWallet(
+                    walletType = StorePointRepository.WalletType.GLOBE,
+                    countedBalance = StorePointRepository.roundMoney(startingGlobeLoad),
+                    actorUsername = username,
+                    notes = "Shift start float verification"
+                )
             }
             Toast.makeText(context, "Shift session started with ${storeConfig.value?.currencySymbol}$normCash starting cash drawer.", Toast.LENGTH_SHORT).show()
         } else {
@@ -44,23 +53,36 @@ internal fun StorePointViewModel.shiftCloseCashierShiftImpl(
     endingGlobeLoad: Double? = null
 ) {
     viewModelScope.launch {
+        if (!endingCash.isFinite() || endingCash < 0.0) {
+            Toast.makeText(context, "Ending cash must be zero or greater.", Toast.LENGTH_SHORT).show()
+            return@launch
+        }
+        val actor = activeUser.value?.username ?: "shift-close"
         val normEndingCash = StorePointRepository.roundMoney(endingCash)
         repository.endActiveSession(normEndingCash)
-        val currentConfig = repository.getStoreConfigSync()
-        if (currentConfig != null) {
-            var updated = currentConfig
-            if (endingGCash != null) {
-                updated = updated.copy(gcashBalance = StorePointRepository.roundMoney(endingGCash))
-            }
-            if (endingSmartLoad != null) {
-                updated = updated.copy(smartLoadBalance = StorePointRepository.roundMoney(endingSmartLoad))
-            }
-            if (endingGlobeLoad != null) {
-                updated = updated.copy(globeLoadBalance = StorePointRepository.roundMoney(endingGlobeLoad))
-            }
-            if (updated != currentConfig) {
-                repository.saveStoreConfig(updated)
-            }
+        if (endingGCash != null && endingGCash.isFinite() && endingGCash >= 0.0) {
+            repository.reconcileWallet(
+                walletType = StorePointRepository.WalletType.GCASH,
+                countedBalance = StorePointRepository.roundMoney(endingGCash),
+                actorUsername = actor,
+                notes = "Shift close reconciliation"
+            )
+        }
+        if (endingSmartLoad != null && endingSmartLoad.isFinite() && endingSmartLoad >= 0.0) {
+            repository.reconcileWallet(
+                walletType = StorePointRepository.WalletType.SMART,
+                countedBalance = StorePointRepository.roundMoney(endingSmartLoad),
+                actorUsername = actor,
+                notes = "Shift close reconciliation"
+            )
+        }
+        if (endingGlobeLoad != null && endingGlobeLoad.isFinite() && endingGlobeLoad >= 0.0) {
+            repository.reconcileWallet(
+                walletType = StorePointRepository.WalletType.GLOBE,
+                countedBalance = StorePointRepository.roundMoney(endingGlobeLoad),
+                actorUsername = actor,
+                notes = "Shift close reconciliation"
+            )
         }
         clearCart()
         Toast.makeText(context, "Shift session closed. Drawer totals updated offline.", Toast.LENGTH_SHORT).show()

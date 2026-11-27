@@ -95,6 +95,15 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     val allInventoryMovements: StateFlow<List<InventoryMovementEntity>> = repository.allInventoryMovements
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allActiveCustomers: StateFlow<List<CustomerAccount>> = repository.allActiveCustomers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allCustomers: StateFlow<List<CustomerAccount>> = repository.allCustomers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val pendingPrintJobs: StateFlow<List<PendingPrintJob>> = repository.allPendingPrintJobs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Relational StateFlows (@Relation) ---
     val allCategoriesWithProducts: StateFlow<List<CategoryWithProducts>> = repository.allCategoriesWithProducts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -429,7 +438,13 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
 
     // --- Authentication & Terminal State ---
     val isKioskModeActive = MutableStateFlow(prefs.getBoolean("is_kiosk_mode_active", false))
+    val isKioskLockdownDegraded = MutableStateFlow(false)
     val isBiometricEnabled = MutableStateFlow(prefs.getBoolean("is_biometric_enabled", true))
+    val lastPrintedReceipt = MutableStateFlow<LastPrintedReceiptPayload?>(null)
+    val hidScannerSuppressed = MutableStateFlow(false)
+    private val _hidBarcodeScans = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    val hidBarcodeScans: SharedFlow<String> = _hidBarcodeScans.asSharedFlow()
+    fun emitHidBarcodeScan(barcode: String) { _hidBarcodeScans.tryEmit(barcode) }
     val lastLoggedInUser = MutableStateFlow(prefs.getString("last_logged_in_user", null))
     val allowedTerminalApps = MutableStateFlow<Set<String>>(
         DigitalServicesHelper.getAllowedApps(context.getSharedPreferences(DigitalServicesHelper.PREFS_NAME, Context.MODE_PRIVATE))
@@ -556,9 +571,10 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         totalAmount: Double,
         checkoutItems: List<Pair<Product, Int>>? = null,
         customerName: String = "",
+        customerId: Int? = null,
         onError: (String) -> Unit = {},
         onSuccess: (Transaction) -> Unit
-    ) = cartExecuteCheckoutImpl(paymentMethod, cashPaid, subtotal, taxAmount, totalAmount, checkoutItems, customerName, onError, onSuccess)
+    ) = cartExecuteCheckoutImpl(paymentMethod, cashPaid, subtotal, taxAmount, totalAmount, checkoutItems, customerName, customerId, onError, onSuccess)
 
     // --- Inventory & Products Forwarders ---
     fun exportInventoryJson(): String = inventoryExportJsonImpl()
@@ -689,6 +705,24 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     fun addPaymentSchedule(title: String, amount: Double, dueDate: String, category: String, priority: String, paymentMethod: String = "CASH") = schedulesAddPaymentScheduleImpl(title, amount, dueDate, category, priority, paymentMethod)
     fun togglePaymentScheduleStatus(schedule: PaymentSchedule) = schedulesTogglePaymentScheduleStatusImpl(schedule)
     fun deletePaymentSchedule(schedule: PaymentSchedule) = schedulesDeletePaymentScheduleImpl(schedule)
+
+    // --- Offline Extensions (Suki Tab, Print Queue, X-Reading, Quick-Sell, CSV) ---
+    fun saveCustomerAccount(account: CustomerAccount, onResult: (Boolean, String, Long?) -> Unit = { _, _, _ -> }) = offlineSaveCustomerAccountImpl(account, onResult)
+    fun deleteCustomerAccount(customerId: Int, onResult: (Boolean, String) -> Unit = { _, _ -> }) = offlineDeleteCustomerAccountImpl(customerId, onResult)
+    fun recordCustomerPayment(customerId: Int, amount: Double, paymentMethod: String, notes: String = "", printSlip: Boolean = false, onResult: (Boolean, String, CustomerCreditEntry?) -> Unit = { _, _, _ -> }) =
+        offlineRecordCustomerPaymentImpl(customerId, amount, paymentMethod, notes, printSlip, onResult)
+    fun getCustomerCreditLedger(customerId: Int): Flow<List<CustomerCreditEntry>> = offlineGetCustomerCreditLedgerImpl(customerId)
+    fun retryPrintJob(job: PendingPrintJob, onCompleted: (Boolean, String) -> Unit = { _, _ -> }) = offlineRetryPrintJobImpl(job, onCompleted)
+    fun retryAllPendingPrintJobs(onCompleted: (Int, Int) -> Unit = { _, _ -> }) = offlineRetryAllPendingPrintJobsImpl(onCompleted)
+    fun deletePrintJob(jobId: Int) = offlineDeletePrintJobImpl(jobId)
+    fun clearPrintQueue() = offlineClearPrintQueueImpl()
+    fun reprintLastReceipt(onCompleted: (Boolean, String) -> Unit) = offlineReprintLastReceiptImpl(onCompleted)
+    fun computeActiveShiftXReading(onResult: (ShiftXReadingSummary?) -> Unit) = offlineComputeActiveShiftXReadingImpl(onResult)
+    fun printXReadingHardware(summary: ShiftXReadingSummary, onCompleted: (Boolean, String) -> Unit) = offlinePrintXReadingHardwareImpl(summary, onCompleted)
+    fun setProductQuickSellPinned(productId: Int, pinned: Boolean) = offlineSetProductQuickSellPinnedImpl(productId, pinned)
+    fun buildCatalogCsvString(): String = offlineBuildCatalogCsvStringImpl()
+    fun previewCatalogCsv(csvContent: String, onResult: (com.munzo.storepoint.util.CatalogCsvImportPreview) -> Unit) = offlinePreviewCatalogCsvImpl(csvContent, onResult)
+    fun commitCatalogCsvImport(rows: List<com.munzo.storepoint.util.CatalogCsvRow>, onResult: (Boolean, String, CsvCatalogImportResult?) -> Unit) = offlineCommitCatalogCsvImportImpl(rows, onResult)
 
     // --- Returns, Refunds & Item Exchanges ---
     data class ReturnItemDraft(

@@ -70,6 +70,9 @@ internal class ShiftUserConfigRepository(private val db: AppDatabase) {
         cashierSessionDao.getSessionWithDrawers(id)
 
     suspend fun startSession(username: String, startingCash: Double): Boolean = withContext(Dispatchers.IO) {
+        require(!startingCash.isNaN() && !startingCash.isInfinite() && startingCash >= 0.0) {
+            "Starting cash float must be zero or greater."
+        }
         val timestamp = System.currentTimeMillis()
         val normStartingCash = StorePointRepository.roundMoney(startingCash)
         var started = false
@@ -86,6 +89,9 @@ internal class ShiftUserConfigRepository(private val db: AppDatabase) {
     }
 
     suspend fun endActiveSession(endingCash: Double) = withContext(Dispatchers.IO) {
+        require(!endingCash.isNaN() && !endingCash.isInfinite() && endingCash >= 0.0) {
+            "Ending cash must be zero or greater."
+        }
         val active = cashierSessionDao.getActiveSessionSync()
         if (active != null) {
             val normEndingCash = StorePointRepository.roundMoney(endingCash)
@@ -108,8 +114,14 @@ internal class ShiftUserConfigRepository(private val db: AppDatabase) {
     suspend fun getDrawerTransactionsBySessionSync(sessionId: Int): List<DrawerTransaction> =
         drawerTransactionDao.getDrawerTransactionsBySessionSync(sessionId)
 
-    suspend fun logDrawerTransaction(tx: DrawerTransaction): Long =
-        drawerTransactionDao.insertDrawerTransaction(tx.copy(amount = StorePointRepository.roundMoney(tx.amount)))
+    suspend fun logDrawerTransaction(tx: DrawerTransaction): Long {
+        require(!tx.amount.isNaN() && !tx.amount.isInfinite() && tx.amount != 0.0) {
+            "Drawer transaction amount must be a valid non-zero number."
+        }
+        return drawerTransactionDao.insertDrawerTransaction(
+            tx.copy(amount = StorePointRepository.roundMoney(tx.amount))
+        )
+    }
 
     // --- Wallet Ledger ---
     val allWalletLedger: Flow<List<WalletLedgerEntry>> = walletLedgerDao.getAllWalletLedger()
@@ -143,6 +155,13 @@ internal class ShiftUserConfigRepository(private val db: AppDatabase) {
         reference: String = "",
         notes: String = ""
     ): Double = withContext(Dispatchers.IO) {
+        require(
+            walletType == StorePointRepository.WalletType.GCASH ||
+                walletType == StorePointRepository.WalletType.SMART ||
+                walletType == StorePointRepository.WalletType.GLOBE
+        ) { "Unsupported wallet type: $walletType" }
+        require(!delta.isNaN() && !delta.isInfinite()) { "Wallet delta must be a finite number." }
+
         var computedNext = 0.0
         db.runInTransaction {
             val currentConfig = storeConfigDao.getStoreConfigBlocking() ?: return@runInTransaction
@@ -150,7 +169,7 @@ internal class ShiftUserConfigRepository(private val db: AppDatabase) {
                 StorePointRepository.WalletType.GCASH -> currentConfig.gcashBalance
                 StorePointRepository.WalletType.SMART -> currentConfig.smartLoadBalance
                 StorePointRepository.WalletType.GLOBE -> currentConfig.globeLoadBalance
-                else -> currentConfig.gcashBalance
+                else -> return@runInTransaction
             }
             val next = StorePointRepository.roundMoney(current + delta)
             computedNext = next
@@ -245,20 +264,31 @@ internal class ShiftUserConfigRepository(private val db: AppDatabase) {
         endingSmartLoad: Double? = null,
         endingGlobeLoad: Double? = null
     ) = withContext(Dispatchers.IO) {
+        require(!endingCash.isNaN() && !endingCash.isInfinite() && endingCash >= 0.0) {
+            "Ending cash must be a valid non-negative amount."
+        }
+        for ((label, v) in listOf("GCash" to endingGCash, "Smart Load" to endingSmartLoad, "Globe Load" to endingGlobeLoad)) {
+            if (v != null) {
+                require(!v.isNaN() && !v.isInfinite() && v >= 0.0) {
+                    "Ending $label balance must be a valid non-negative amount."
+                }
+            }
+        }
         db.withTransaction {
-            shiftReconciliationDao.insertReconciliation(reconciliation)
+            val activeSession = cashierSessionDao.getActiveSessionSync()
+                ?: throw IllegalStateException("No active shift session found to reconcile and close.")
+            shiftReconciliationDao.insertReconciliation(
+                reconciliation.copy(sessionId = activeSession.id)
+            )
 
             val normEndingCash = StorePointRepository.roundMoney(endingCash)
-            val activeSession = cashierSessionDao.getActiveSessionSync()
-            if (activeSession != null) {
-                cashierSessionDao.updateSession(
-                    activeSession.copy(
-                        endTime = reconciliation.timestamp,
-                        endingCash = normEndingCash,
-                        status = "CLOSED"
-                    )
+            cashierSessionDao.updateSession(
+                activeSession.copy(
+                    endTime = reconciliation.timestamp,
+                    endingCash = normEndingCash,
+                    status = "CLOSED"
                 )
-            }
+            )
 
             val currentConfig = storeConfigDao.getStoreConfigSync()
             if (currentConfig != null) {

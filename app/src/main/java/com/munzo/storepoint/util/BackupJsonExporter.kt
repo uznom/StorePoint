@@ -6,8 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.security.MessageDigest
-import java.util.Date
 
 /**
  * Serializes all StorePoint Room tables into the canonical versioned JSON backup envelope.
@@ -39,6 +37,8 @@ internal object BackupJsonExporter {
         exportReturns(db, tables, exportErrors)
         exportSuppliersAndPurchaseOrders(db, tables, exportErrors)
         exportParkedTransactions(db, tables, exportErrors)
+        exportCustomerCreditLedger(db, tables, exportErrors)
+        BackupJsonExtendedTables.exportAll(db, tables, exportErrors)
 
         root.put("tables", tables)
 
@@ -48,10 +48,8 @@ internal object BackupJsonExporter {
             root.put("exportErrors", errorsJson)
         }
 
-        val tablesString = tables.toString()
-        val checksum = MessageDigest.getInstance("SHA-256")
-            .digest(tablesString.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        val checksum = BackupIntegrityCodec.computeCanonicalChecksum(tables)
+        root.put("checksumAlgorithm", BackupIntegrityCodec.CHECKSUM_ALGO_CANONICAL)
         root.put("checksum", checksum)
 
         root.toString(2)
@@ -71,6 +69,10 @@ internal object BackupJsonExporter {
             put("hasLoad", storeConfig.hasLoad)
             put("smartLoadBalance", storeConfig.smartLoadBalance)
             put("globeLoadBalance", storeConfig.globeLoadBalance)
+            put("loadServiceFee", storeConfig.loadServiceFee)
+            put("gcashServiceFee", storeConfig.gcashServiceFee)
+            put("mayaServiceFee", storeConfig.mayaServiceFee)
+            put("mayaBankFee", storeConfig.mayaBankFee)
         })
     }
 
@@ -83,6 +85,8 @@ internal object BackupJsonExporter {
                 put("passwordHash", u.pinHash)
                 put("role", u.role)
                 put("barcodeId", u.barcodeId)
+                put("biometricEnrolled", u.biometricEnrolled)
+                put("pinResetRequired", u.pinResetRequired)
             })
         }
         tables.put("users", usersArray)
@@ -90,10 +94,13 @@ internal object BackupJsonExporter {
 
     private suspend fun exportCategories(db: AppDatabase, tables: JSONObject) {
         val catArray = JSONArray()
-        db.categoryDao.getAllCategoriesSync().forEach { c ->
+        db.categoryDao.getAllCategoriesIncludingArchivedSync().forEach { c ->
             catArray.put(JSONObject().apply {
                 put("id", c.id)
                 put("name", c.name)
+                put("colorAccent", c.colorAccent)
+                put("iconBadge", c.iconBadge)
+                put("isArchived", c.isArchived)
             })
         }
         tables.put("categories", catArray)
@@ -101,7 +108,7 @@ internal object BackupJsonExporter {
 
     private suspend fun exportProducts(db: AppDatabase, tables: JSONObject) {
         val prodArray = JSONArray()
-        db.productDao.getAllProductsSync().forEach { p ->
+        db.productDao.getAllProductsIncludingArchivedSync().forEach { p ->
             prodArray.put(JSONObject().apply {
                 put("id", p.id)
                 put("name", p.name)
@@ -129,6 +136,9 @@ internal object BackupJsonExporter {
                 put("barcodeMasterCase", p.barcodeMasterCase)
                 put("barcodeCustomUom", p.barcodeCustomUom)
                 put("baseUom", p.baseUom)
+                put("trackInventory", p.trackInventory)
+                put("isArchived", p.isArchived)
+                put("isQuickSellPinned", p.isQuickSellPinned)
             })
         }
         tables.put("products", prodArray)
@@ -203,6 +213,8 @@ internal object BackupJsonExporter {
                         put("cost", c.getDouble(c.getColumnIndexOrThrow("cost")))
                         val uomIdx = c.getColumnIndex("uomName")
                         put("uomName", if (uomIdx != -1) c.getString(uomIdx) else "pc")
+                        val discIdx = c.getColumnIndex("discountAmount")
+                        put("discountAmount", if (discIdx != -1) c.getDouble(discIdx) else 0.0)
                     })
                 }
                 tables.put("transaction_items", arr)
@@ -275,6 +287,8 @@ internal object BackupJsonExporter {
                         put("cost", c.getDouble(c.getColumnIndexOrThrow("cost")))
                         put("barcode", c.getString(c.getColumnIndexOrThrow("barcode")))
                         put("isDefault", c.getInt(c.getColumnIndexOrThrow("isDefault")) == 1)
+                        val stockIdx = c.getColumnIndex("stockCount")
+                        put("stockCount", if (stockIdx != -1) c.getInt(stockIdx) else 0)
                     })
                 }
                 tables.put("product_variants", arr)
@@ -417,6 +431,12 @@ internal object BackupJsonExporter {
                         put("productName", c.getString(c.getColumnIndexOrThrow("productName")))
                         put("price", c.getDouble(c.getColumnIndexOrThrow("price")))
                         put("quantity", c.getInt(c.getColumnIndexOrThrow("quantity")))
+                        val uomIdx = c.getColumnIndex("uomName")
+                        put("uomName", if (uomIdx != -1) c.getString(uomIdx) else "Base Unit")
+                        val multIdx = c.getColumnIndex("uomMultiplier")
+                        put("uomMultiplier", if (multIdx != -1) c.getInt(multIdx) else 1)
+                        val discIdx = c.getColumnIndex("discountAmount")
+                        put("discountAmount", if (discIdx != -1) c.getDouble(discIdx) else 0.0)
                     })
                 }
                 tables.put("parked_transaction_items", arr)
@@ -424,6 +444,52 @@ internal object BackupJsonExporter {
         } catch (e: Exception) {
             errors.add("parked_transactions: ${e.localizedMessage}")
             Log.w(TAG, "Error exporting parked_transactions: ${e.message}", e)
+        }
+    }
+
+    private fun exportCustomerCreditLedger(db: AppDatabase, tables: JSONObject, errors: MutableList<String>) {
+        try {
+            db.query("SELECT * FROM customer_accounts", null).use { c ->
+                val arr = JSONArray()
+                while (c.moveToNext()) {
+                    arr.put(JSONObject().apply {
+                        put("id", c.getInt(c.getColumnIndexOrThrow("id")))
+                        put("name", c.getString(c.getColumnIndexOrThrow("name")))
+                        put("phone", c.getString(c.getColumnIndexOrThrow("phone")))
+                        put("address", c.getString(c.getColumnIndexOrThrow("address")))
+                        put("creditLimit", c.getDouble(c.getColumnIndexOrThrow("creditLimit")))
+                        put("currentBalance", c.getDouble(c.getColumnIndexOrThrow("currentBalance")))
+                        put("notes", c.getString(c.getColumnIndexOrThrow("notes")))
+                        put("isActive", c.getInt(c.getColumnIndexOrThrow("isActive")) == 1)
+                        put("createdAt", c.getLong(c.getColumnIndexOrThrow("createdAt")))
+                        put("updatedAt", c.getLong(c.getColumnIndexOrThrow("updatedAt")))
+                    })
+                }
+                tables.put("customer_accounts", arr)
+            }
+
+            db.query("SELECT * FROM customer_credit_ledger", null).use { c ->
+                val arr = JSONArray()
+                while (c.moveToNext()) {
+                    arr.put(JSONObject().apply {
+                        put("id", c.getInt(c.getColumnIndexOrThrow("id")))
+                        put("customerId", c.getInt(c.getColumnIndexOrThrow("customerId")))
+                        put("timestamp", c.getLong(c.getColumnIndexOrThrow("timestamp")))
+                        put("actorUsername", c.getString(c.getColumnIndexOrThrow("actorUsername")))
+                        put("type", c.getString(c.getColumnIndexOrThrow("type")))
+                        put("amount", c.getDouble(c.getColumnIndexOrThrow("amount")))
+                        put("balanceAfter", c.getDouble(c.getColumnIndexOrThrow("balanceAfter")))
+                        put("paymentMethod", c.getString(c.getColumnIndexOrThrow("paymentMethod")))
+                        val txIdx = c.getColumnIndexOrThrow("transactionId")
+                        if (!c.isNull(txIdx)) put("transactionId", c.getInt(txIdx))
+                        put("notes", c.getString(c.getColumnIndexOrThrow("notes")))
+                    })
+                }
+                tables.put("customer_credit_ledger", arr)
+            }
+        } catch (e: Exception) {
+            errors.add("customer_accounts: ${e.localizedMessage}")
+            Log.w(TAG, "Error exporting customer credit ledger: ${e.message}", e)
         }
     }
 }

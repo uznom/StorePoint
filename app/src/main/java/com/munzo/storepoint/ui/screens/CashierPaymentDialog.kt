@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.munzo.storepoint.data.CustomerAccount
 import com.munzo.storepoint.data.Product
 import com.munzo.storepoint.data.StorePointRepository
 import com.munzo.storepoint.data.Transaction
@@ -53,12 +54,16 @@ fun CashierPaymentDialog(
     onDismiss: () -> Unit,
     onCheckoutSuccess: (Transaction, List<TransactionItem>, List<PendingDigitalService>) -> Unit
 ) {
-    var selectedPaymentMethod by remember { mutableStateOf("CASH") } // "CASH", "GCASH", "MAYA", "SPLIT"
+    var selectedPaymentMethod by remember { mutableStateOf("CASH") } // "CASH", "GCASH", "MAYA", "SPLIT", "SUKI_CREDIT"
     var selectedSplitWallet by remember { mutableStateOf("GCash") }
     var amountPaidInput by remember { mutableStateOf("") }
     var splitCashPaidInput by remember { mutableStateOf("") }
     var ewalletRefNumber by remember { mutableStateOf("") }
     var customerNameInput by remember { mutableStateOf("") }
+    var sukiSearchQuery by remember { mutableStateOf("") }
+    var selectedSukiCustomer by remember { mutableStateOf<CustomerAccount?>(null) }
+    var showQuickAddSukiDialog by remember { mutableStateOf(false) }
+    val activeSukiCustomers by viewModel.allActiveCustomers.collectAsState()
     var isSubmitting by remember { mutableStateOf(false) }
     val reduceMotion = LocalReduceMotion.current
     val metrics = LocalAdaptiveMetrics.current
@@ -136,6 +141,13 @@ fun CashierPaymentDialog(
                         label = { Text("Split Tender", fontWeight = FontWeight.Bold) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.TrendingFlat, null, modifier = Modifier.size(16.dp)) },
                         modifier = Modifier.testTag("pay_split_method")
+                    )
+                    HeroFilterChip(
+                        selected = selectedPaymentMethod == "SUKI_CREDIT",
+                        onClick = { selectedPaymentMethod = "SUKI_CREDIT" },
+                        label = { Text("Suki Tab", fontWeight = FontWeight.Bold) },
+                        leadingIcon = { Icon(Icons.Default.MenuBook, null, modifier = Modifier.size(16.dp)) },
+                        modifier = Modifier.testTag("pay_suki_credit_method")
                     )
                 }
 
@@ -405,6 +417,132 @@ fun CashierPaymentDialog(
                             )
                         }
                     }
+                    "SUKI_CREDIT" -> {
+                        val filteredSuki = remember(activeSukiCustomers, sukiSearchQuery) {
+                            val q = sukiSearchQuery.trim()
+                            if (q.isEmpty()) activeSukiCustomers
+                            else activeSukiCustomers.filter {
+                                it.name.contains(q, ignoreCase = true) || it.phone.contains(q, ignoreCase = true)
+                            }
+                        }
+                        val currentPicked = selectedSukiCustomer?.let { sel ->
+                            activeSukiCustomers.find { it.id == sel.id } ?: sel
+                        }
+                        val projectedBalance = (currentPicked?.currentBalance ?: 0.0) + totalAmount
+                        val limitExceeded = currentPicked != null && projectedBalance > currentPicked.creditLimit + 0.009
+
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                HeroInput(
+                                    value = sukiSearchQuery,
+                                    onValueChange = { sukiSearchQuery = it },
+                                    placeholder = { Text("Search Suki customer...") },
+                                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                HeroButton(
+                                    onClick = { showQuickAddSukiDialog = true },
+                                    text = "+ New",
+                                    icon = Icons.Default.PersonAdd,
+                                    color = HeroColor.Primary,
+                                    variant = HeroButtonVariant.Flat,
+                                    size = HeroSize.Sm
+                                )
+                            }
+
+                            if (filteredSuki.isEmpty()) {
+                                Text(
+                                    "No Suki accounts found. Tap '+ New' to register a Suki credit customer.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    filteredSuki.take(6).forEach { acct ->
+                                        val isChosen = currentPicked?.id == acct.id
+                                        Surface(
+                                            onClick = { selectedSukiCustomer = acct },
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = if (isChosen) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceContainerLow,
+                                            border = BorderStroke(
+                                                width = if (isChosen) 1.5.dp else 1.dp,
+                                                color = if (isChosen) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(acct.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                    if (acct.phone.isNotBlank()) {
+                                                        Text(acct.phone, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+                                                Column(horizontalAlignment = Alignment.End) {
+                                                    Text(
+                                                        "Bal: $curr${String.format(Locale.getDefault(), "%.2f", acct.currentBalance)}",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        "Limit: $curr${String.format(Locale.getDefault(), "%.2f", acct.creditLimit)}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (currentPicked != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (limitExceeded) MaterialTheme.colorScheme.errorContainer
+                                    else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .shakeOnTrigger(shakeTrigger)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("Current Balance:", style = MaterialTheme.typography.bodySmall)
+                                            Text("$curr${String.format(Locale.getDefault(), "%.2f", currentPicked.currentBalance)}", fontWeight = FontWeight.Bold)
+                                        }
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("New Projected Balance:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                "$curr${String.format(Locale.getDefault(), "%.2f", projectedBalance)}",
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = if (limitExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        if (limitExceeded) {
+                                            Text(
+                                                "Exceeds credit limit ($curr${String.format(Locale.getDefault(), "%.2f", currentPicked.creditLimit)}). Increase limit or record a payment first.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 }
 
@@ -418,9 +556,14 @@ fun CashierPaymentDialog(
                 )
 
                 // Submit Checkout Actions
+                val resolvedSuki = selectedSukiCustomer?.let { sel ->
+                    activeSukiCustomers.find { it.id == sel.id } ?: sel
+                }
                 val isSubmitEnabled = when (selectedPaymentMethod) {
                     "CASH" -> totalAmount <= 0.0 || (amountPaidInput.isNotBlank() && parsedPayAmount >= totalAmount)
                     "SPLIT" -> splitCashPaidInput.isNotBlank() && parsedSplitCash > 0.0 && parsedSplitCash < totalAmount
+                    "SUKI_CREDIT" -> resolvedSuki != null && totalAmount > 0.0 &&
+                        (resolvedSuki.currentBalance + totalAmount) <= (resolvedSuki.creditLimit + 0.009)
                     else -> true // GCASH or MAYA exact digital payment
                 }
 
@@ -440,9 +583,11 @@ fun CashierPaymentDialog(
                         val finalCash = when (selectedPaymentMethod) {
                             "CASH" -> parsedPayAmount
                             "SPLIT" -> parsedSplitCash
+                            "SUKI_CREDIT" -> 0.0
                             else -> totalAmount
                         }
                         val finalCustomer = when {
+                            selectedPaymentMethod == "SUKI_CREDIT" -> resolvedSuki?.name ?: customerNameInput
                             selectedPaymentMethod == "SPLIT" -> {
                                 val base = customerNameInput.ifBlank { "Walk-in" }
                                 val refStr = if (ewalletRefNumber.isNotBlank()) " Ref:$ewalletRefNumber" else ""
@@ -464,6 +609,7 @@ fun CashierPaymentDialog(
                             totalAmount = totalAmount,
                             cartLineItems = activeCartItems,
                             customerName = finalCustomer,
+                            customerId = if (selectedPaymentMethod == "SUKI_CREDIT") resolvedSuki?.id else null,
                             onError = { _ ->
                                 isSubmitting = false
                                 tactile.perform(TactileHapticRole.WarningReject)
@@ -490,6 +636,24 @@ fun CashierPaymentDialog(
             }
         }
     }
+
+    if (showQuickAddSukiDialog) {
+        SukiCustomerFormDialog(
+            editingCustomer = null,
+            curr = curr,
+            onSave = { account ->
+                viewModel.saveCustomerAccount(account) { ok, _, newId ->
+                    if (ok) {
+                        if (newId != null) {
+                            selectedSukiCustomer = account.copy(id = newId.toInt())
+                        }
+                        showQuickAddSukiDialog = false
+                    }
+                }
+            },
+            onDismiss = { showQuickAddSukiDialog = false }
+        )
+    }
 }
 
 private fun executePaymentSubmission(
@@ -501,6 +665,7 @@ private fun executePaymentSubmission(
     totalAmount: Double,
     cartLineItems: List<Pair<Product, Int>>,
     customerName: String = "",
+    customerId: Int? = null,
     onError: (String) -> Unit = {},
     onComplete: (Transaction, List<TransactionItem>) -> Unit
 ) {
@@ -529,7 +694,8 @@ private fun executePaymentSubmission(
             price = StorePointRepository.roundMoney(effectivePrice),
             quantity = lineItem.second,
             cost = prod.cost * uom.multiplier,
-            uomName = uom.name
+            uomName = uom.name,
+            discountAmount = StorePointRepository.roundMoney(discount * lineItem.second)
         )
     }
 
@@ -541,6 +707,7 @@ private fun executePaymentSubmission(
         totalAmount = totalAmount,
         checkoutItems = cartLineItems,
         customerName = customerName,
+        customerId = customerId,
         onError = onError,
         onSuccess = { createdTransaction ->
             val finalItems = itemsToSave.map { it.copy(transactionId = createdTransaction.id) }

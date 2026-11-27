@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
@@ -71,6 +72,8 @@ fun KioskStatusBar(
     val context = LocalContext.current
     val storeConfig by viewModel.storeConfig.collectAsState()
     val activeUser by viewModel.activeUser.collectAsState()
+    val isKioskActive by viewModel.isKioskModeActive.collectAsState()
+    val isKioskDegraded by viewModel.isKioskLockdownDegraded.collectAsState()
     val isAdmin = activeUser?.role.equals("ADMIN", ignoreCase = true)
 
     var timeString by remember { mutableStateOf("") }
@@ -669,6 +672,42 @@ fun KioskStatusBar(
                             }
                         }
                     }
+                }
+            }
+
+            AnimatedVisibility(visible = isKioskActive && isKioskDegraded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFF3CD))
+                        .clickable {
+                            Toast.makeText(
+                                context,
+                                "Provision StorePoint as Device Owner via ADB in Admin > Security for full hardware lockdown.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Reduced kiosk lockdown",
+                        tint = Color(0xFF8A5A00),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "REDUCED KIOSK — Screen Pinning Only · Provision Device Owner in Admin > Security",
+                        color = Color(0xFF663C00),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.5.sp
+                        )
+                    )
                 }
             }
 

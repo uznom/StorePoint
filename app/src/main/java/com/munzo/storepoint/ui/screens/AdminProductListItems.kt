@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarOutline
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -59,6 +61,7 @@ internal fun AdminProductCatalogList(
     onDelete: (Int) -> Unit,
     onRestockClick: (Product) -> Unit,
     onVariantsClick: (Product) -> Unit,
+    onToggleQuickSellPin: (Product) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val metrics = LocalAdaptiveMetrics.current
@@ -93,7 +96,8 @@ internal fun AdminProductCatalogList(
                             onEdit = onEdit,
                             onDelete = onDelete,
                             onRestockClick = onRestockClick,
-                            onVariantsClick = onVariantsClick
+                            onVariantsClick = onVariantsClick,
+                            onToggleQuickSellPin = onToggleQuickSellPin
                         )
                         HeroDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     }
@@ -113,7 +117,8 @@ internal fun AdminProductCatalogList(
                     onEdit = onEdit,
                     onDelete = onDelete,
                     onRestockClick = onRestockClick,
-                    onVariantsClick = onVariantsClick
+                    onVariantsClick = onVariantsClick,
+                    onToggleQuickSellPin = onToggleQuickSellPin
                 )
             }
         }
@@ -163,7 +168,7 @@ private fun AdminProductTableHeader() {
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(214.dp)
+            modifier = Modifier.width(254.dp)
         )
     }
 }
@@ -177,7 +182,8 @@ private fun AdminProductTableRow(
     onEdit: (Product) -> Unit,
     onDelete: (Int) -> Unit,
     onRestockClick: (Product) -> Unit,
-    onVariantsClick: (Product) -> Unit
+    onVariantsClick: (Product) -> Unit,
+    onToggleQuickSellPin: (Product) -> Unit
 ) {
     val tactile = rememberTactileFeedback()
     val isLowStock = item.stockCount in 1..5
@@ -258,7 +264,7 @@ private fun AdminProductTableRow(
         }
 
         Row(
-            modifier = Modifier.width(214.dp),
+            modifier = Modifier.width(254.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -273,6 +279,23 @@ private fun AdminProductTableRow(
                 Icon(Icons.Default.AddCircle, contentDescription = "Restock", modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Restock", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            }
+
+            OutlinedIconButton(
+                onClick = {
+                    tactile.perform(TactileHapticRole.Tap)
+                    onToggleQuickSellPin(item)
+                },
+                modifier = Modifier
+                    .size(34.dp)
+                    .testTag("product_pin_btn_${item.id}")
+            ) {
+                Icon(
+                    imageVector = if (item.isQuickSellPinned) Icons.Default.Star else Icons.Default.StarOutline,
+                    contentDescription = if (item.isQuickSellPinned) "Unpin Quick-Sell" else "Pin to Quick-Sell",
+                    tint = if (item.isQuickSellPinned) Color(0xFFD97706) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
             }
 
             OutlinedIconButton(
@@ -319,7 +342,8 @@ private fun AdminProductCardItem(
     onEdit: (Product) -> Unit,
     onDelete: (Int) -> Unit,
     onRestockClick: (Product) -> Unit,
-    onVariantsClick: (Product) -> Unit
+    onVariantsClick: (Product) -> Unit,
+    onToggleQuickSellPin: (Product) -> Unit
 ) {
     val tactile = rememberTactileFeedback()
     val isLowStock = item.stockCount in 1..5
@@ -453,6 +477,23 @@ private fun AdminProductCardItem(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    OutlinedIconButton(
+                        onClick = {
+                            tactile.perform(TactileHapticRole.Tap)
+                            onToggleQuickSellPin(item)
+                        },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .testTag("product_pin_btn_${item.id}")
+                    ) {
+                        Icon(
+                            imageVector = if (item.isQuickSellPinned) Icons.Default.Star else Icons.Default.StarOutline,
+                            contentDescription = if (item.isQuickSellPinned) "Unpin Quick-Sell" else "Pin to Quick-Sell",
+                            tint = if (item.isQuickSellPinned) Color(0xFFD97706) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
                     OutlinedIconButton(
                         onClick = {
                             tactile.perform(TactileHapticRole.Tap)
