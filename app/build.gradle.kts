@@ -43,8 +43,11 @@ android {
   buildTypes {
     release {
       isCrunchPngs = false
-      isMinifyEnabled = true
-      isShrinkResources = true
+      // Disabled per startup-reliability safeguard so release APKs match debug runtime
+      // behavior with zero R8 reflection/Room/Compose stripping crashes. Keep-rules in
+      // proguard-rules.pro remain maintained if minification is re-enabled later.
+      isMinifyEnabled = false
+      isShrinkResources = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
@@ -88,6 +91,7 @@ ksp {
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
+  implementation(libs.androidx.fragment.ktx)
   implementation(libs.androidx.biometric)
   implementation(libs.androidx.camera.camera2)
   implementation(libs.androidx.camera.core)

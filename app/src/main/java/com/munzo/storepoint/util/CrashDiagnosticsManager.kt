@@ -41,13 +41,19 @@ object CrashDiagnosticsManager {
     var currentCashier: String = "None"
 
     fun initCrashHandler(context: Context) {
+        val appContext = context.applicationContext
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
 
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                recordCrash(context, throwable)
+                recordCrash(appContext, throwable)
             } catch (e: Exception) {
                 android.util.Log.e("CrashDiagnostics", "Failed saving crash log", e)
+            }
+            try {
+                StartupBootGuard.recordUncaughtCrash(appContext, thread.name, throwable)
+            } catch (e: Exception) {
+                android.util.Log.e("CrashDiagnostics", "Failed updating startup boot guard", e)
             } finally {
                 defaultHandler?.uncaughtException(thread, throwable)
             }
@@ -252,6 +258,18 @@ object CrashDiagnosticsManager {
             storageFreeMb = storageFreeMb,
             crashes = crashes
         )
+    }
+
+    fun formatSingleCrashReport(record: CrashRecord): String = buildString {
+        appendLine("StorePoint POS Crash Record")
+        appendLine("Timestamp: ${record.dateFormatted}")
+        appendLine("Exception: ${record.exceptionName}")
+        appendLine("Message: ${record.message}")
+        appendLine("Device: ${record.deviceInfo}")
+        appendLine("Active Cashier: ${record.activeCashier}")
+        appendLine()
+        appendLine("--- STACK TRACE ---")
+        append(record.stackTrace)
     }
 
     fun shareDiagnosticsReport(context: Context) {

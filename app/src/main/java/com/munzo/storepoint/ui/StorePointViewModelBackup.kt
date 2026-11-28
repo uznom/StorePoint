@@ -15,12 +15,24 @@ import org.json.JSONObject
 
 // --- System Observability & Crash Diagnostics ---
 internal fun StorePointViewModel.backupRefreshCrashLogsImpl() {
-    crashLogs.value = CrashDiagnosticsManager.getCrashLogs(context)
+    viewModelScope.launch(Dispatchers.IO) {
+        try {
+            crashLogs.value = CrashDiagnosticsManager.getCrashLogs(context)
+        } catch (e: Exception) {
+            android.util.Log.w("StorePointViewModel", "Failed reading crash logs: ${e.message}")
+        }
+    }
 }
 
 internal fun StorePointViewModel.backupClearCrashLogsImpl() {
-    CrashDiagnosticsManager.clearCrashLogs(context)
-    backupRefreshCrashLogsImpl()
+    viewModelScope.launch(Dispatchers.IO) {
+        try {
+            CrashDiagnosticsManager.clearCrashLogs(context)
+            crashLogs.value = emptyList()
+        } catch (e: Exception) {
+            android.util.Log.w("StorePointViewModel", "Failed clearing crash logs: ${e.message}")
+        }
+    }
 }
 
 internal fun StorePointViewModel.backupGetDiagnosticReportImpl(): String {
@@ -29,7 +41,13 @@ internal fun StorePointViewModel.backupGetDiagnosticReportImpl(): String {
 
 // --- Disaster Recovery & Database Backup ---
 internal fun StorePointViewModel.backupRefreshBackupSnapshotsImpl() {
-    backupSnapshots.value = DatabaseBackupManager.listLocalSnapshots(context)
+    viewModelScope.launch(Dispatchers.IO) {
+        try {
+            backupSnapshots.value = DatabaseBackupManager.listLocalSnapshots(context)
+        } catch (e: Exception) {
+            android.util.Log.w("StorePointViewModel", "Failed reading backup snapshots: ${e.message}")
+        }
+    }
 }
 
 internal fun StorePointViewModel.backupCheckAndPerformDailyAutoBackupImpl() {

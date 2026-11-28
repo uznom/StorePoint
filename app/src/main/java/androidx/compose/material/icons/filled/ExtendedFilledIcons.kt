@@ -16,6 +16,8 @@ import java.util.concurrent.ConcurrentHashMap
  */
 private val iconCache = ConcurrentHashMap<String, ImageVector>()
 
+private const val FALLBACK_ICON_PATH = "M4,4h16v16H4Z"
+
 private fun cachedIcon(name: String, vararg paths: String): ImageVector {
     return iconCache.computeIfAbsent(name) {
         val builder = ImageVector.Builder(
@@ -26,12 +28,25 @@ private fun cachedIcon(name: String, vararg paths: String): ImageVector {
             viewportHeight = 24f,
             autoMirror = false,
         )
+        var addedAny = false
         for (raw in paths) {
             val isEvenOdd = raw.startsWith("E:")
             val d = if (isEvenOdd) raw.substring(2) else raw
+            try {
+                builder.addPath(
+                    pathData = PathParser().parsePathString(d).toNodes(),
+                    pathFillType = if (isEvenOdd) PathFillType.EvenOdd else PathFillType.NonZero,
+                    fill = SolidColor(Color.Black),
+                )
+                addedAny = true
+            } catch (e: Throwable) {
+                android.util.Log.w("ExtendedFilledIcons", "Failed parsing icon path for $name: ${e.message}")
+            }
+        }
+        if (!addedAny) {
             builder.addPath(
-                pathData = PathParser().parsePathString(d).toNodes(),
-                pathFillType = if (isEvenOdd) PathFillType.EvenOdd else PathFillType.NonZero,
+                pathData = PathParser().parsePathString(FALLBACK_ICON_PATH).toNodes(),
+                pathFillType = PathFillType.NonZero,
                 fill = SolidColor(Color.Black),
             )
         }

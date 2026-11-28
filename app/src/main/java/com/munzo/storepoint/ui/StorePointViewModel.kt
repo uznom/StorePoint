@@ -283,14 +283,18 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
      */
     val sessionCache = SessionStateCache(context)
 
-    init {
-        // Mirror every cart/UOM change to the draft. Debounced is unnecessary here:
-        // the write is a tiny SharedPreferences `apply()` (async, in-memory commit),
-        // not a disk sync.
-        viewModelScope.launch {
-            combine(_cartMap, _selectedCartUoms) { cart, uoms -> cart to uoms }
-                .collect { (cart, uoms) -> sessionCache.saveCartDraft(cart, uoms) }
-        }
+    /**
+     * Number of lines recovered by the most recent [restoreCartDraft] call.
+     *
+     * Exposed to the POS screen so it can show a "Restored your basket" notice.
+     */
+    var restoredCartLineCount: Int = 0
+        internal set
+
+    /** Clears the "basket restored" acknowledgement once the POS screen has shown it. */
+    fun acknowledgeCartRestore() {
+        restoredCartLineCount = 0
+        sessionCache.didRestoreCart = false
     }
 
     /**
@@ -341,20 +345,6 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /**
-     * Number of lines recovered by the most recent [restoreCartDraft] call.
-     *
-     * Exposed to the POS screen so it can show a "Restored your basket" notice.
-     */
-    var restoredCartLineCount: Int = 0
-        internal set
-
-    /** Clears the "basket restored" acknowledgement once the POS screen has shown it. */
-    fun acknowledgeCartRestore() {
-        restoredCartLineCount = 0
-        sessionCache.didRestoreCart = false
-    }
-
 
     fun getDrawerPayoutsInActiveSession(): Double = shiftGetDrawerPayoutsInActiveSessionImpl()
     fun getCurrentDrawerCash(): Double = shiftGetCurrentDrawerCashImpl()
@@ -388,19 +378,41 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
     val receiptFooter = MutableStateFlow(prefs.getString("receipt_footer", "Thank you for your business! Please come again.") ?: "Thank you for your business! Please come again.")
     val printReceiptBarcode = MutableStateFlow(prefs.getBoolean("print_receipt_barcode", true))
 
+    // --- Authentication & Terminal State (declared BEFORE init blocks to avoid Main.immediate races) ---
+    val isKioskModeActive = MutableStateFlow(prefs.getBoolean("is_kiosk_mode_active", false))
+    val isKioskLockdownDegraded = MutableStateFlow(false)
+    val isBiometricEnabled = MutableStateFlow(prefs.getBoolean("is_biometric_enabled", true))
+    val lastPrintedReceipt = MutableStateFlow<LastPrintedReceiptPayload?>(null)
+    val hidScannerSuppressed = MutableStateFlow(false)
+    private val _hidBarcodeScans = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    val hidBarcodeScans: SharedFlow<String> = _hidBarcodeScans.asSharedFlow()
+    fun emitHidBarcodeScan(barcode: String) { _hidBarcodeScans.tryEmit(barcode) }
+    val lastLoggedInUser = MutableStateFlow(prefs.getString("last_logged_in_user", null))
+    val allowedTerminalApps = MutableStateFlow<Set<String>>(
+        DigitalServicesHelper.getAllowedApps(context.getSharedPreferences(DigitalServicesHelper.PREFS_NAME, Context.MODE_PRIVATE))
+    )
+    val usersPendingPinReset: StateFlow<List<User>> = repository.usersPendingPinReset
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val biometricEnrolledUsers: StateFlow<List<User>> = repository.biometricEnrolledUsers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
-        // Pre-populate core default accounts and product folders quickly
+        // Mirror every cart/UOM change to the draft via async SharedPreferences apply().
+        viewModelScope.launch {
+            combine(_cartMap, _selectedCartUoms) { cart, uoms -> cart to uoms }
+                .collect { (cart, uoms) -> sessionCache.saveCartDraft(cart, uoms) }
+        }
+        // Pre-populate core default accounts and product folders asynchronously.
         viewModelScope.launch {
             try {
                 repository.prePopulateData()
-                // Wait for storeConfig Flow to emit its first non-null value from database
                 val config = withTimeoutOrNull(3000L) {
                     repository.storeConfig.filterNotNull().first()
                 }
                 if (config?.setupCompleted == true) {
                     checkAndPerformDailyAutoBackup()
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 android.util.Log.e("StorePointViewModel", "Error initializing store configuration / database", e)
             } finally {
                 isDatabaseReady.value = true
@@ -435,24 +447,6 @@ class StorePointViewModel(application: Application) : AndroidViewModel(applicati
         hasGCash, hasMaya, hasLoad, smartLoadBalance, globeLoadBalance,
         loadServiceFee, gcashServiceFee, mayaServiceFee, mayaBankFee
     )
-
-    // --- Authentication & Terminal State ---
-    val isKioskModeActive = MutableStateFlow(prefs.getBoolean("is_kiosk_mode_active", false))
-    val isKioskLockdownDegraded = MutableStateFlow(false)
-    val isBiometricEnabled = MutableStateFlow(prefs.getBoolean("is_biometric_enabled", true))
-    val lastPrintedReceipt = MutableStateFlow<LastPrintedReceiptPayload?>(null)
-    val hidScannerSuppressed = MutableStateFlow(false)
-    private val _hidBarcodeScans = MutableSharedFlow<String>(extraBufferCapacity = 16)
-    val hidBarcodeScans: SharedFlow<String> = _hidBarcodeScans.asSharedFlow()
-    fun emitHidBarcodeScan(barcode: String) { _hidBarcodeScans.tryEmit(barcode) }
-    val lastLoggedInUser = MutableStateFlow(prefs.getString("last_logged_in_user", null))
-    val allowedTerminalApps = MutableStateFlow<Set<String>>(
-        DigitalServicesHelper.getAllowedApps(context.getSharedPreferences(DigitalServicesHelper.PREFS_NAME, Context.MODE_PRIVATE))
-    )
-    val usersPendingPinReset: StateFlow<List<User>> = repository.usersPendingPinReset
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val biometricEnrolledUsers: StateFlow<List<User>> = repository.biometricEnrolledUsers
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Authentication & User Forwarders ---
     fun toggleKioskMode(active: Boolean) = authToggleKioskModeImpl(active)

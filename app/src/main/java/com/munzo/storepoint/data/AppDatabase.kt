@@ -84,6 +84,36 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_18_19 get() = DatabaseMigrations.MIGRATION_18_19
         val MIGRATION_19_20 get() = DatabaseMigrationsV20.MIGRATION_19_20
 
+        const val DATABASE_NAME = "storepoint_pos_db"
+
+        /**
+         * Executes SQLite PRAGMAs that return a result row via [SupportSQLiteDatabase.query]
+         * instead of `execSQL`, because Android's Framework SQLite throws `SQLiteException`
+         * when `execSQL` is called on row-returning statements (`mmap_size`, `busy_timeout`,
+         * `wal_autocheckpoint`).
+         */
+        internal fun executePragmaQuery(db: SupportSQLiteDatabase, pragma: String) {
+            try {
+                db.query(pragma)?.use { cursor ->
+                    cursor.moveToFirst()
+                }
+            } catch (e: Throwable) {
+                try {
+                    android.util.Log.w("AppDatabase", "SQLite pragma query note ($pragma): ${e.message}")
+                } catch (_: Throwable) {}
+            }
+        }
+
+        internal fun executePragmaStatement(db: SupportSQLiteDatabase, pragma: String) {
+            try {
+                db.execSQL(pragma)
+            } catch (e: Throwable) {
+                try {
+                    android.util.Log.w("AppDatabase", "SQLite pragma exec note ($pragma): ${e.message}")
+                } catch (_: Throwable) {}
+            }
+        }
+
         fun configureConnectionPragmas(db: SupportSQLiteDatabase, isMigrating: Boolean = false) {
             // CRITICAL: Do NOT enable foreign key enforcement while a schema migration is in progress.
             // In SQLite, dropping a table while foreign_keys=ON triggers cascading deletes on child tables
@@ -91,83 +121,73 @@ abstract class AppDatabase : RoomDatabase() {
             if (!isMigrating) {
                 try {
                     db.setForeignKeyConstraintsEnabled(true)
-                } catch (_: Exception) {}
-                try {
-                    db.execSQL("PRAGMA foreign_keys = ON;")
-                } catch (_: Exception) {}
+                } catch (_: Throwable) {}
+                executePragmaStatement(db, "PRAGMA foreign_keys = ON;")
             }
-            try {
-                val is64Bit = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val is64Bit = try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                     android.os.Process.is64Bit()
                 } else false
-                // Right-size cache: 16MB native page cache per connection holds active working set
-                val cacheKb = if (is64Bit) -16384 else -8192
-                db.execSQL("PRAGMA cache_size = $cacheKb;")
-                val mmapSize = if (is64Bit) 134217728L else 33554432L
-                db.execSQL("PRAGMA mmap_size = $mmapSize;")
-                db.execSQL("PRAGMA temp_store = MEMORY;")
-                db.execSQL("PRAGMA synchronous = NORMAL;")
-                db.execSQL("PRAGMA busy_timeout = 5000;")
-            } catch (e: Exception) {
-                android.util.Log.w("AppDatabase", "Turbo SQLite connection configure note: ${e.message}")
+            } catch (_: Throwable) {
+                false
+            }
+            // Right-size cache: 16MB native page cache per connection holds active working set
+            val cacheKb = if (is64Bit) -16384 else -8192
+            executePragmaStatement(db, "PRAGMA cache_size = $cacheKb;")
+            executePragmaStatement(db, "PRAGMA temp_store = MEMORY;")
+            executePragmaStatement(db, "PRAGMA synchronous = NORMAL;")
+            // Row-returning pragmas MUST use query() on Android Framework SQLite.
+            val mmapSize = if (is64Bit) 134217728L else 33554432L
+            executePragmaQuery(db, "PRAGMA mmap_size = $mmapSize;")
+            executePragmaQuery(db, "PRAGMA busy_timeout = 5000;")
+        }
+
+        /**
+         * Safely closes and clears the singleton Room instance so [DatabaseRecoveryManager]
+         * can quarantine a corrupted database file and reopen a fresh instance without stale handles.
+         */
+        fun resetInstance() {
+            synchronized(this) {
+                try {
+                    INSTANCE?.close()
+                } catch (e: Exception) {
+                    android.util.Log.w("AppDatabase", "Error closing previous AppDatabase instance: ${e.message}")
+                } finally {
+                    INSTANCE = null
+                }
             }
         }
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "storepoint_pos_db"
-                )
-                .openHelperFactory(PragmaConfiguringOpenHelperFactory())
-                .addMigrations(*DatabaseMigrations.ALL_MIGRATIONS)
-                .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                                 // Room 2.7 deprecates the no-arg overload; the boolean overload's
-                 // `dropAllTables = false` is the behavior-identical replacement
-                 // (default for the Builder flag is false, matching the legacy no-arg call).
-                 .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = false)
-                // NOTE: Intentionally NO destructive-fallback migration for forward upgrades.
-                // This app declares hasFragileUserData=true (POS sales + inventory).
-                // If a schema upgrade ever fails/mismatches, Room will fail to open the
-                // database instead of silently wiping all rows. Recovery path is the
-                // JSON backup restore flow (DatabaseBackupManager).
-                .addCallback(object : RoomDatabase.Callback() {
-                    override fun onOpen(db: SupportSQLiteDatabase) {
-                        super.onOpen(db)
-                        try {
-                            db.setForeignKeyConstraintsEnabled(true)
-                        } catch (_: Exception) {}
-                        db.execSQL("PRAGMA foreign_keys = ON;")
-
-                        // Turbo Memory Optimization: Maximize RAM cache & memory-mapped I/O based on device capabilities
-                        try {
-                            val is64Bit = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                android.os.Process.is64Bit()
-                            } else false
-                            // Right-size cache: 16MB native page cache holds the entire active POS dataset in RAM without native OOM
-                            val cacheKb = if (is64Bit) -16384 else -8192
-                            db.execSQL("PRAGMA cache_size = $cacheKb;")
-                            // Bound memory-mapped I/O: 128MB on 64-bit, 32MB on 32-bit POS terminals to prevent address fragmentation
-                            val mmapSize = if (is64Bit) 134217728L else 33554432L
-                            db.execSQL("PRAGMA mmap_size = $mmapSize;")
-                            // Store temporary tables, indices, and sort operations in RAM memory
-                            db.execSQL("PRAGMA temp_store = MEMORY;")
-                            // Optimize WAL synchronization for immediate high-throughput transactions
-                            db.execSQL("PRAGMA synchronous = NORMAL;")
-                            // Busy timeout: prevents 'database locked' / 'no connections' errors under concurrent write loads
-                            db.execSQL("PRAGMA busy_timeout = 5000;")
-                            // Autocheckpoint WAL at 1000 pages to keep WAL size bounded and read performance peak
-                            db.execSQL("PRAGMA wal_autocheckpoint = 1000;")
-                            android.util.Log.i("AppDatabase", "Turbo Memory Engaged: cacheKb=$cacheKb, mmap=${mmapSize / (1024 * 1024)}MB, temp_store=MEMORY, busy_timeout=5000ms, is64Bit=$is64Bit")
-                        } catch (e: Exception) {
-                            android.util.Log.w("AppDatabase", "Turbo SQLite memory config note: ${e.message}")
-                        }
-                    }
-                })
-                .build()
-                INSTANCE = instance
-                instance
+                INSTANCE ?: run {
+                    val instance = Room.databaseBuilder(
+                        context.applicationContext,
+                        AppDatabase::class.java,
+                        DATABASE_NAME
+                    )
+                        .openHelperFactory(PragmaConfiguringOpenHelperFactory())
+                        .addMigrations(*DatabaseMigrations.ALL_MIGRATIONS)
+                        .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
+                        .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = false)
+                        // NOTE: Intentionally NO silent destructive-fallback migration for forward upgrades.
+                        // Corrupted or unreadable databases are explicitly quarantined and recovered via
+                        // DatabaseRecoveryManager, which prompts the operator to restore a backup.
+                        .addCallback(object : RoomDatabase.Callback() {
+                            override fun onOpen(db: SupportSQLiteDatabase) {
+                                super.onOpen(db)
+                                try {
+                                    db.setForeignKeyConstraintsEnabled(true)
+                                } catch (_: Exception) {}
+                                executePragmaStatement(db, "PRAGMA foreign_keys = ON;")
+                                configureConnectionPragmas(db, isMigrating = false)
+                                executePragmaQuery(db, "PRAGMA wal_autocheckpoint = 1000;")
+                            }
+                        })
+                        .build()
+                    INSTANCE = instance
+                    instance
+                }
             }
         }
 
@@ -265,8 +285,11 @@ class PragmaConfiguringOpenHelperFactory(
         val wrappedCallback = object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(configuration.callback.version) {
             override fun onConfigure(db: SupportSQLiteDatabase) {
                 configuration.callback.onConfigure(db)
-                val isMigrating = db.version > 0 && db.version < configuration.callback.version
-                AppDatabase.configureConnectionPragmas(db, isMigrating = isMigrating)
+                // Do NOT call db.version or enable foreign keys inside onConfigure:
+                // migrations haven't run yet and querying user_version during early SQLite
+                // configuration can fail on Android Framework SQLite. Foreign keys are
+                // enabled post-migration inside RoomDatabase.Callback.onOpen().
+                AppDatabase.configureConnectionPragmas(db, isMigrating = true)
             }
             override fun onCreate(db: SupportSQLiteDatabase) = configuration.callback.onCreate(db)
             override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = configuration.callback.onUpgrade(db, oldVersion, newVersion)
